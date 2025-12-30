@@ -3,7 +3,7 @@ import { GitHubComment } from "alchemy/github";
 import { CloudflareStateStore } from "alchemy/state";
 import { Nextjs } from "alchemy/cloudflare";
 
-const app = await alchemy("andrewingram.net", {
+const app = await alchemy("andrewingram", {
   stateStore: (scope) => new CloudflareStateStore(scope),
 });
 
