@@ -2,7 +2,7 @@
 
 import { ColumnDef } from "@tanstack/react-table";
 
-import type { Post } from "@/data/posts";
+import type { Post } from "@/lib/posts";
 import Link from "next/link";
 
 export const columns: ColumnDef<Post>[] = [
@@ -12,8 +12,11 @@ export const columns: ColumnDef<Post>[] = [
     // accessorFn: (row) => row.title,
     cell(props) {
       return (
-        <Link className="font-medium" href={`/cms/posts/${props.row.id}`}>
-          {props.getValue("title")}
+        <Link
+          className="font-medium"
+          href={`/cms/posts/${props.row.original.id}`}
+        >
+          {props.row.original.title}
         </Link>
       );
     },

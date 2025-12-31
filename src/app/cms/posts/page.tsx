@@ -8,18 +8,15 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-
+import Link from "next/link";
 import { columns } from "./columns";
 import { DataTable } from "./data-table";
 import { Button } from "@/components/ui/button";
-import { ALL_POSTS } from "@/data/posts";
-
-async function getData() {
-  return ALL_POSTS;
-}
+import { getAllPosts } from "@/lib/posts";
+import { AppRuntime } from "@/lib/runtime";
 
 export default async function Page() {
-  const data = await getData();
+  const data = await AppRuntime.runPromise(getAllPosts());
 
   return (
     <>
@@ -33,7 +30,7 @@ export default async function Page() {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink href="#">Content</BreadcrumbLink>
+                <BreadcrumbLink href="/cms">Content</BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator className="hidden md:block" />
               <BreadcrumbItem className="hidden md:block">
@@ -43,7 +40,9 @@ export default async function Page() {
           </Breadcrumb>
         </div>
         <div className="flex items-center gap-2">
-          <Button>New post</Button>
+          <Button asChild>
+            <Link href="/cms/posts/new">New post</Link>
+          </Button>
         </div>
       </header>
       <div className="flex flex-1 flex-col gap-4 p-4">
