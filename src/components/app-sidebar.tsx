@@ -1,70 +1,23 @@
 "use client"
 
 import * as React from "react"
-import {
-  AudioWaveform,
-  BookOpen,
-  Bot,
-  Command,
-  Frame,
-  GalleryVerticalEnd,
-  Map,
-  PieChart,
-  Settings2,
-  SquareTerminal,
-} from "lucide-react"
+import { ImageIcon, SquareTerminal } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
-import { NavProjects } from "@/components/nav-projects"
-import { NavUser } from "@/components/nav-user"
-import { TeamSwitcher } from "@/components/team-switcher"
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarRail,
-} from "@/components/ui/sidebar"
+import { Sidebar, SidebarContent } from "@/components/ui/sidebar"
 
 // This is sample data.
 const data = {
   navMain: [
     {
       title: "Posts",
-      url: "#",
+      url: "/cms/posts",
       icon: SquareTerminal,
-      isActive: true,
-      items: [
-        {
-          title: "Shorts",
-          url: "#",
-        },
-        {
-          title: "Longs",
-          url: "#",
-        },
-        {
-          title: "Reactions",
-          url: "#",
-        },
-      ],
-    },
-  ],
-  projects: [
-    {
-      name: "Design Engineering",
-      url: "#",
-      icon: Frame,
     },
     {
-      name: "Sales & Marketing",
-      url: "#",
-      icon: PieChart,
-    },
-    {
-      name: "Travel",
-      url: "#",
-      icon: Map,
+      title: "Images",
+      url: "/cms/images",
+      icon: ImageIcon,
     },
   ],
 }

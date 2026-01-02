@@ -16,6 +16,10 @@
 # production
 /build
 
+# Local assets
+/data
+/src/public/uploads
+
 # misc
 .DS_Store
 *.pem

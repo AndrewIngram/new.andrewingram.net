@@ -1,8 +1,8 @@
 "use server";
 
 import { savePost, type SavePostInput } from "@/lib/posts";
-import { Effect } from "effect";
+import { AppRuntime } from "@/lib/runtime";
 
 export async function savePostAction(input: SavePostInput) {
-  return Effect.runPromise(savePost(input));
+  return AppRuntime.runPromise(savePost(input));
 }

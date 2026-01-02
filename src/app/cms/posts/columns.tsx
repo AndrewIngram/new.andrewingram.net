@@ -25,4 +25,14 @@ export const columns: ColumnDef<Post>[] = [
     accessorKey: "status",
     header: "Status",
   },
+  {
+    accessorKey: "type",
+    header: "Type",
+    cell(props) {
+      const type = props.row.original.type;
+      if (type === "short") return "Short form";
+      if (type === "reaction") return "Reaction";
+      return "Long form";
+    },
+  },
 ];

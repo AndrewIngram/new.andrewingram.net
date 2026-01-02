@@ -1,0 +1,120 @@
+import Link from "next/link";
+
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import { AppRuntime } from "@/lib/runtime";
+import { getAllImages } from "@/lib/images";
+
+import { uploadImageAction } from "./actions";
+
+export default async function Page() {
+  const images = await AppRuntime.runPromise(getAllImages());
+
+  return (
+    <>
+      <header className="flex min-h-16 flex-wrap items-center gap-3 border-b px-4 py-2">
+        <SidebarTrigger className="-ml-1" />
+        <Separator
+          orientation="vertical"
+          className="mr-1 data-[orientation=vertical]:h-4"
+        />
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem className="hidden md:block">
+              <BreadcrumbLink href="/cms">Content</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator className="hidden md:block" />
+            <BreadcrumbItem>
+              <BreadcrumbPage>Images</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+        <div className="ml-auto flex items-center gap-2">
+          <Button asChild variant="outline">
+            <Link href="/cms/posts">Posts</Link>
+          </Button>
+        </div>
+      </header>
+      <div className="flex flex-1 flex-col gap-6 p-6">
+        <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-900">Upload image</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Add an image and an optional caption for the library.
+          </p>
+          <form
+            action={uploadImageAction}
+            className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end"
+          >
+            <div className="flex-1">
+              <label className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                File
+              </label>
+              <Input name="file" type="file" accept="image/*" required />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                Caption (optional)
+              </label>
+              <Input name="caption" type="text" placeholder="Photo by..." />
+            </div>
+            <Button type="submit">Upload</Button>
+          </form>
+        </section>
+
+        <section>
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-semibold text-gray-900">
+              Image library
+            </h1>
+            <span className="text-sm text-gray-500">
+              {images.length} images
+            </span>
+          </div>
+          {images.length === 0 ? (
+            <div className="mt-6 rounded-lg border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">
+              No images yet. Upload one to get started.
+            </div>
+          ) : (
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {images.map((image) => (
+                <div
+                  key={image.id}
+                  className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm"
+                >
+                  <div className="aspect-video bg-gray-50">
+                    <img
+                      src={`/images/${image.id}`}
+                      alt={image.originalName}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div className="space-y-1 p-3">
+                    <p className="text-sm font-medium text-gray-900">
+                      {image.originalName}
+                    </p>
+                    {image.caption ? (
+                      <p className="text-sm text-gray-600">{image.caption}</p>
+                    ) : (
+                      <p className="text-xs text-gray-400">No caption</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </>
+  );
+}
