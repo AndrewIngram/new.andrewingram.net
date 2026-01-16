@@ -1,20 +1,26 @@
 import alchemy from "alchemy";
 import { GitHubComment } from "alchemy/github";
 import { CloudflareStateStore } from "alchemy/state";
-import { Nextjs } from "alchemy/cloudflare";
+import { D1Database, Nextjs } from "alchemy/cloudflare";
 
 const app = await alchemy("andrewingram", {
   stateStore: (scope) => new CloudflareStateStore(scope),
 });
 
+const db = await D1Database("database", {
+  name: "andrewingram",
+  migrationsDir: "./migrations",
+  migrationsTable: "drizzle_migrations",
+});
+
+console.log("Database Migrations Set Up");
+
 export const worker = await Nextjs("website", {
   name: `${app.name}-${app.stage}-website`,
+  bindings: {
+    DB: db,
+  },
 });
-
-console.log({
-  url: worker.url,
-});
-
 
 if (process.env.PULL_REQUEST) {
   const previewUrl = worker.url;
