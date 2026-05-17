@@ -1,3 +1,5 @@
+import { createFileRoute } from "@tanstack/react-router";
+
 import { AppSidebar } from "@/components/app-sidebar"
 import {
   Breadcrumb,
@@ -14,7 +16,11 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 
-export default function Page() {
+export const Route = createFileRoute("/dashboard")({
+  component: DashboardPage,
+});
+
+function DashboardPage() {
   return (
     <SidebarProvider>
       <AppSidebar />

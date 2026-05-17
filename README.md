@@ -1,18 +1,18 @@
-# Welcome to Next.js on Cloudflare!
+# AndrewIngram.net
 
 [![Deployed with Alchemy](https://alchemy.run/alchemy-badge.svg)](https://alchemy.run)
 
-A modern, production-ready template for building full-stack React applications using Next.js on Cloudflare Workers.
+A TanStack Start app deployed to Cloudflare Workers with Alchemy.
 
 ## Features
 
-- 🚀 Server-side rendering with React Server Components
+- 🚀 Server-side rendering with TanStack Start
 - ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization via OpenNext
-- 🔄 Server Actions and API routes
+- 📦 Asset bundling and optimization via Vite
+- 🔄 Server functions and server route handlers
 - 🔒 TypeScript by default
 - 🌐 Cloudflare Workers runtime
-- 📖 [Next.js docs](https://nextjs.org/docs)
+- 📖 [TanStack Start docs](https://tanstack.com/start)
 
 ## Getting Started
 
@@ -68,18 +68,16 @@ npm run destroy
 
 ## Project Structure
 
-- `src/app/` - Next.js App Router pages and components
+- `src/app/` - TanStack Start routes and app components
 - `public/` - Static assets
 - `alchemy.run.ts` - Infrastructure configuration
-- `next.config.ts` - Next.js configuration
-- `open-next.config.ts` - OpenNext configuration for Cloudflare
+- `vite.config.ts` - TanStack Start and Vite configuration
 
 ## Learn More
 
-- [Next.js Documentation](https://nextjs.org/docs)
+- [TanStack Start Documentation](https://tanstack.com/start)
 - [Alchemy Documentation](https://alchemy.run)
-- [OpenNext for Cloudflare](https://opennext.js.org/cloudflare)
 
 ---
 
-Built with ❤️ using Next.js and Alchemy.
+Built with TanStack Start and Alchemy.

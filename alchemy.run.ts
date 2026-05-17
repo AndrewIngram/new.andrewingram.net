@@ -1,46 +1,62 @@
-import alchemy from "alchemy";
-import { GitHubComment } from "alchemy/github";
-import { CloudflareStateStore } from "alchemy/state";
-import { D1Database, Nextjs } from "alchemy/cloudflare";
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
-const app = await alchemy("andrewingram", {
-  stateStore: (scope) => new CloudflareStateStore(scope),
-});
+const providers = Layer.mergeAll(Cloudflare.providers());
 
-const db = await D1Database("database", {
-  name: "andrewingram",
-  migrationsDir: "./migrations",
-  migrationsTable: "drizzle_migrations",
-});
+const state = Cloudflare.state();
 
-console.log("Database Migrations Set Up");
+export const db: Effect.Effect<Cloudflare.D1Database, never, any> = Effect.gen(
+  function* () {
+    const alchemy = yield* Alchemy.AlchemyContext;
+    const props = {
+      migrationsDir: "./migrations",
+      migrationsTable: "drizzle_migrations",
+      importFiles: ["./initial-data/posts.sql"],
+    };
 
-export const worker = await Nextjs("website", {
-  name: `${app.name}-${app.stage}-website`,
+    return yield* Cloudflare.D1Database(
+      "database",
+      alchemy.dev ? props : { ...props, name: "andrewingram" },
+    );
+  },
+);
+
+export const imageBucket: Effect.Effect<Cloudflare.R2Bucket, never, any> =
+  Effect.gen(function* () {
+    const alchemy = yield* Alchemy.AlchemyContext;
+    return yield* Cloudflare.R2Bucket(
+      "images",
+      alchemy.dev ? {} : { name: "andrewingram-images" },
+    );
+  });
+
+export const Website = Cloudflare.Vite("website", {
+  compatibility: {
+    date: "2026-04-30",
+    flags: ["nodejs_compat"],
+  },
   bindings: {
     DB: db,
+    IMAGES: imageBucket,
   },
 });
 
-if (process.env.PULL_REQUEST) {
-  const previewUrl = worker.url;
+export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
+export type WorkerEnv = WebsiteEnv;
 
-  await GitHubComment("pr-preview-comment", {
-    owner: process.env.GITHUB_REPOSITORY_OWNER || "your-username",
-    repository: process.env.GITHUB_REPOSITORY_NAME || "andrewingram.net",
-    issueNumber: Number(process.env.PULL_REQUEST),
-    body: `
-## 🚀 Preview Deployed
+export default Alchemy.Stack(
+  "andrewingram",
+  {
+    providers,
+    state,
+  },
+  Effect.gen(function* () {
+    const website = yield* Website;
 
-Your preview is ready!
-
-**Preview URL:** ${previewUrl}
-
-This preview was built from commit ${process.env.GITHUB_SHA}
-
----
-<sub>🤖 This comment will be updated automatically when you push new commits to this PR.</sub>`,
-  });
-}
-
-await app.finalize();
+    return {
+      url: website.url,
+    };
+  }),
+);

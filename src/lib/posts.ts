@@ -1,24 +1,18 @@
 import { Data, Effect } from "effect";
 import * as Schema from "effect/Schema";
 import type { JSONContent } from "@tiptap/core";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { FileSystem } from "@effect/platform";
-import { decodeJson, parseJson } from "./json";
+import { desc, eq } from "drizzle-orm";
+import { getDbAsync } from "@/db";
+import { posts } from "@/db/schema";
+import { RecordNotFound } from "./errors";
 
-const PostStatusSchema = Schema.Literal("draft", "published", "archived");
-const PostTypeSchema = Schema.Literal("long", "short", "reaction");
-const PostMetaSchema = Schema.Struct({
-  sourceKind: Schema.optional(Schema.Literal("tweet", "url", "video")),
-  sourceUrl: Schema.optional(Schema.String),
-});
+const PostStatusSchema = Schema.Literals(["draft", "published", "archived"]);
 const PostSchema = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
   status: PostStatusSchema,
   content: Schema.Unknown,
-  type: Schema.optional(PostTypeSchema),
-  meta: Schema.optional(PostMetaSchema),
   createdAt: Schema.String,
   updatedAt: Schema.String,
   publishedAt: Schema.optional(Schema.String),
@@ -26,22 +20,9 @@ const PostSchema = Schema.Struct({
 
 type PostFromSchema = Schema.Schema.Type<typeof PostSchema>;
 export type PostStatus = Schema.Schema.Type<typeof PostStatusSchema>;
-export type PostType = Schema.Schema.Type<typeof PostTypeSchema>;
-export type PostMeta = Schema.Schema.Type<typeof PostMetaSchema>;
-export type Post = Omit<PostFromSchema, "content" | "type" | "meta"> & {
+export type Post = Omit<PostFromSchema, "content"> & {
   content: JSONContent;
-  type: PostType;
-  meta: PostMeta;
 };
-
-export class PostsParseError extends Data.TaggedError("PostsParseError")<{
-  cause: unknown;
-}> {}
-
-export class PostsDecodeError extends Data.TaggedError("PostsDecodeError")<{
-  label: string;
-  cause: unknown;
-}> {}
 
 export class PostsLoadAllError extends Data.TaggedError("PostsLoadAllError")<{
   cause: unknown;
@@ -57,50 +38,37 @@ export class PostsSaveError extends Data.TaggedError("PostsSaveError")<{
   cause: unknown;
 }> {}
 
-const DATA_ROOT = process.env.POSTS_DATA_DIR ?? process.cwd();
-const DATA_DIR = path.join(DATA_ROOT, "data", "posts");
-
 const defaultContent: JSONContent = {
   type: "doc",
   content: [{ type: "paragraph" }],
 };
 
-const ensureDataDir = Effect.gen(function* (_) {
-  const fs = yield* FileSystem.FileSystem;
-  yield* _(fs.makeDirectory(DATA_DIR, { recursive: true }));
+const postModelName = "posts";
+
+const toIsoString = (value: Date) => value.toISOString();
+
+const toStatus = (value: typeof posts.$inferSelect.status) => value ?? "draft";
+
+const parseContent = (value: unknown): JSONContent => {
+  if (value == null) return defaultContent;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value) as JSONContent;
+    } catch {
+      return defaultContent;
+    }
+  }
+  return value as JSONContent;
+};
+
+const toPost = (row: typeof posts.$inferSelect): Post => ({
+  id: row.id ?? "",
+  title: row.title ?? "",
+  status: toStatus(row.status),
+  content: parseContent(row.content),
+  createdAt: toIsoString(row.createdAt ?? new Date(0)),
+  updatedAt: toIsoString(row.updatedAt ?? new Date(0)),
 });
-
-const parsePostJson = (input: string) => parseJson(input);
-
-const decodePost = (
-  raw: unknown,
-  label: string
-): Effect.Effect<Post, PostsDecodeError> =>
-  decodeJson(
-    PostSchema,
-    raw,
-    (cause) => new PostsDecodeError({ label, cause })
-  ).pipe(
-    Effect.map((decoded) => ({
-      ...decoded,
-      content: decoded.content as JSONContent,
-      type: decoded.type ?? "long",
-      meta: decoded.meta ?? {},
-    }))
-  );
-
-const isNoEntryError = (
-  error: unknown
-): error is {
-  readonly _tag: "SystemError";
-  readonly reason: "NotFound";
-} =>
-  typeof error === "object" &&
-  error !== null &&
-  "_tag" in error &&
-  "reason" in error &&
-  (error as { _tag?: string })._tag === "SystemError" &&
-  (error as { reason?: string }).reason === "NotFound";
 
 export const createDraftPost = (): Post => {
   const now = new Date().toISOString();
@@ -109,119 +77,105 @@ export const createDraftPost = (): Post => {
     title: "",
     status: "draft",
     content: defaultContent,
-    type: "long",
-    meta: {},
     createdAt: now,
     updatedAt: now,
   };
 };
 
-export type SavePostInput = {
-  id: string;
+type PostInput = {
   title: string;
   status: PostStatus;
   content: JSONContent;
-  type: PostType;
-  meta?: PostMeta;
-  publishedAt?: string;
+  publishedAt?: string | undefined;
 };
 
-export class Posts extends Effect.Service<Posts>()("Posts", {
-  accessors: true,
-  effect: Effect.gen(function* (_) {
-    const fs = yield* FileSystem.FileSystem;
+export type CreatePostInput = PostInput;
+export type UpdatePostInput = PostInput & {
+  id: string;
+};
+export type SavePostInput = PostInput & {
+  id: string;
+};
 
-    const readPostFile = (filePath: string, label: string) =>
-      fs.readFileString(filePath).pipe(
-        Effect.flatMap(parsePostJson),
-        Effect.flatMap((json) => decodePost(json, label))
-      );
+const getDb = () => Effect.tryPromise(() => getDbAsync());
 
-    const getAllPosts = () =>
-      Effect.gen(function* (_) {
-        yield* _(ensureDataDir);
-        const entries = yield* fs.readDirectory(DATA_DIR);
-        const jsonFiles = entries.filter((entry) => entry.endsWith(".json"));
-        const posts = yield* _(
-          Effect.forEach(
-            jsonFiles,
-            (entry) => readPostFile(path.join(DATA_DIR, entry), entry),
-            { concurrency: "unbounded" }
-          )
-        );
-        return posts.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-      }).pipe(
-        Effect.catchTag("SystemError", (cause) =>
-          Effect.fail(new PostsLoadAllError({ cause }))
-        )
-      );
+const recordNotFound = (id: string) => new RecordNotFound({ model: postModelName, id });
 
-    const getPostById = (id: string) =>
-      Effect.gen(function* (_) {
-        yield* _(ensureDataDir);
-        return yield* _(readPostFile(path.join(DATA_DIR, `${id}.json`), id));
-      }).pipe(
-        Effect.catchTag("SystemError", (cause) =>
-          Effect.fail(new PostsLoadError({ id, cause }))
-        )
-      );
+export const getAllPosts = () =>
+  Effect.gen(function* () {
+    const db = yield* getDb();
+    const rows = yield* Effect.tryPromise(() =>
+      db.select().from(posts).orderBy(desc(posts.updatedAt)),
+    );
+    return rows.map((row) => toPost(row));
+  }).pipe(Effect.mapError((cause) => new PostsLoadAllError({ cause })));
 
-    const savePost = (input: SavePostInput) => {
-      const resolvedId = input.id === "new" ? randomUUID() : input.id;
+export const getPostById = (id: string) =>
+  Effect.gen(function* () {
+    const db = yield* getDb();
+    const rows = yield* Effect.tryPromise(() =>
+      db.select().from(posts).where(eq(posts.id, id)).limit(1),
+    );
+    const post = rows[0];
+    if (!post) {
+      return yield* Effect.fail(recordNotFound(id));
+    }
+    return toPost(post);
+  }).pipe(
+    Effect.mapError((cause) =>
+      cause instanceof RecordNotFound ? cause : new PostsLoadError({ id, cause }),
+    ),
+  );
 
-      return Effect.gen(function* (_) {
-        yield* _(ensureDataDir);
-        const now = new Date().toISOString();
-        const filePath = path.join(DATA_DIR, `${resolvedId}.json`);
+export const createPost = (input: CreatePostInput) => {
+  const id = randomUUID();
 
-        const existing = yield* _(
-          readPostFile(filePath, filePath).pipe(
-            Effect.catchTag("SystemError", (cause) =>
-              isNoEntryError(cause)
-                ? Effect.succeed(null)
-                : Effect.fail(new PostsSaveError({ id: resolvedId, cause }))
-            )
-          )
-        );
-
-        const post: Post = {
-          id: resolvedId,
+  return Effect.gen(function* () {
+    const db = yield* getDb();
+    const now = new Date();
+    yield* Effect.tryPromise(() =>
+      db.insert(posts).values([
+        {
+          id,
           title: input.title.trim(),
           status: input.status,
           content: input.content ?? defaultContent,
-          type: input.type ?? existing?.type ?? "long",
-          meta: input.meta ?? existing?.meta ?? {},
-          createdAt: existing?.createdAt ?? now,
+          createdAt: now,
           updatedAt: now,
-          publishedAt:
-            input.publishedAt?.trim() ||
-            existing?.publishedAt ||
-            (input.status === "published" ? now : undefined),
-        };
+        },
+      ]),
+    );
+    return { id };
+  }).pipe(Effect.mapError((cause) => new PostsSaveError({ id, cause })));
+};
 
-        yield* _(fs.writeFileString(filePath, JSON.stringify(post, null, 2)));
-        return { id: resolvedId };
-      }).pipe(
-        Effect.catchTags({
-          SystemError: (cause) =>
-            Effect.fail(new PostsSaveError({ id: resolvedId, cause })),
-          JSONParseError: (cause) =>
-            Effect.fail(new PostsSaveError({ id: resolvedId, cause })),
-          PostsDecodeError: (cause) =>
-            Effect.fail(new PostsSaveError({ id: resolvedId, cause })),
-        })
-      );
-    };
+export const updatePost = (input: UpdatePostInput) =>
+  Effect.gen(function* () {
+    const db = yield* getDb();
+    const now = new Date();
+    return yield* Effect.tryPromise(() =>
+      db.transaction(async (tx) => {
+        const existing = await tx.select().from(posts).where(eq(posts.id, input.id)).limit(1);
 
-    return { getAllPosts, getPostById, savePost };
-  }),
-}) {}
+        if (!existing[0]) {
+          throw recordNotFound(input.id);
+        }
 
-export const PostsLive = Posts.Default;
+        await tx
+          .update(posts)
+          .set({
+            title: input.title.trim(),
+            status: input.status,
+            content: input.content ?? defaultContent,
+            updatedAt: now,
+          })
+          .where(eq(posts.id, input.id));
 
-export const getAllPosts = () =>
-  Posts.getAllPosts().pipe(Effect.provide(PostsLive));
-export const getPostById = (id: string) =>
-  Posts.getPostById(id).pipe(Effect.provide(PostsLive));
-export const savePost = (input: SavePostInput) =>
-  Posts.savePost(input).pipe(Effect.provide(PostsLive));
+        return { id: input.id };
+      }),
+    );
+  }).pipe(
+    Effect.mapError((cause) =>
+      cause instanceof RecordNotFound ? cause : new PostsSaveError({ id: input.id, cause }),
+    ),
+  );

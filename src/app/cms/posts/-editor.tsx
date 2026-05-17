@@ -8,14 +8,13 @@ import { Placeholder } from "@tiptap/extensions/placeholder";
 import { Node, type Editor, type JSONContent } from "@tiptap/core";
 import {
   type FormEvent,
-  type PointerEvent as ReactPointerEvent,
   useEffect,
   useMemo,
   useRef,
   useState,
   useTransition,
 } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@tanstack/react-router";
 import {
   Bold,
   Code,
@@ -148,15 +147,6 @@ const normalizeDocContent = (
   };
 };
 
-const stripTitleNode = (content: JSONContent): JSONContent => {
-  const nodes = content.type === "doc" ? (content.content ?? []) : [];
-  const bodyNodes = nodes.filter((node) => node.type !== "title");
-  return {
-    type: "doc",
-    content: bodyNodes.length > 0 ? bodyNodes : [{ type: "paragraph" }],
-  };
-};
-
 const formatDateForInput = (value?: string) =>
   value ? value.slice(0, 10) : "";
 
@@ -167,7 +157,6 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
   const toolbarButtonClass =
     "text-gray-700 hover:bg-gray-100 data-[active=true]:bg-gray-900 data-[active=true]:text-white";
   const router = useRouter();
-  const initialType = post.type ?? "long";
   const defaultLongContent = useMemo(() => {
     const content = post.content ?? {
       type: "doc",
@@ -175,33 +164,18 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
     };
     return normalizeDocContent(content, post.title);
   }, [post.content, post.title]);
-  const defaultCompactContent = useMemo(() => {
-    const content = post.content ?? {
-      type: "doc",
-      content: [{ type: "paragraph" }],
-    };
-    return stripTitleNode(content);
-  }, [post.content]);
 
-  const [postType, setPostType] = useState<Post["type"]>(initialType);
   const [title, setTitle] = useState(() =>
-    initialType === "long"
-      ? extractTitle(defaultLongContent) || post.title
-      : post.title
+    extractTitle(defaultLongContent) || post.title
   );
   const [status, setStatus] = useState(post.status);
   const [publishedAt, setPublishedAt] = useState(post.publishedAt ?? "");
-  const [lastSavedAt, setLastSavedAt] = useState(post.updatedAt);
   const [isSaving, startTransition] = useTransition();
   const [isImageSheetOpen, setImageSheetOpen] = useState(false);
   const [libraryImages, setLibraryImages] = useState<ImageAsset[]>(images);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [uploadCaption, setUploadCaption] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [reactionKind, setReactionKind] = useState<"tweet" | "url" | "video">(
-    post.meta?.sourceKind ?? "url"
-  );
-  const [reactionUrl, setReactionUrl] = useState(post.meta?.sourceUrl ?? "");
   const [captionMode, setCaptionMode] = useState<"use" | "override" | "none">(
     "use"
   );
@@ -219,30 +193,9 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
   });
   const [slashIndex, setSlashIndex] = useState(0);
   const editorRef = useRef<Editor | null>(null);
-  const editorBodyRef = useRef<HTMLDivElement | null>(null);
-  const headerRef = useRef<HTMLElement | null>(null);
-  const minimapTrackRef = useRef<HTMLDivElement | null>(null);
-  const minimapRafRef = useRef<number | null>(null);
-  const minimapDraggingRef = useRef(false);
   const slashStateRef = useRef(slashState);
   const slashIndexRef = useRef(slashIndex);
   const filteredCommandsRef = useRef<SlashCommand[]>([]);
-  const postTypeRef = useRef(postType);
-  const previousTypeRef = useRef<Post["type"]>(postType);
-  const [minimapBlocks, setMinimapBlocks] = useState<
-    {
-      top: number;
-      height: number;
-      variant: "title" | "heading" | "media" | "text";
-    }[]
-  >([]);
-  const [minimapMeta, setMinimapMeta] = useState({
-    contentTop: 0,
-    contentHeight: 0,
-    scrollTop: 0,
-    viewportHeight: 0,
-    headerHeight: 0,
-  });
 
   const updateSlashMenu = (editorInstance: Editor) => {
     const { selection } = editorInstance.state;
@@ -376,153 +329,7 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
       },
     },
   });
-  const compactEditor = useEditor({
-    immediatelyRender: false,
-    extensions: [
-      ImageBlock,
-      StarterKit,
-      Placeholder.configure({
-        showOnlyCurrent: false,
-        placeholder: () =>
-          postTypeRef.current === "reaction"
-            ? "Add your reaction..."
-            : "Share a short thought...",
-      }),
-    ],
-    content: defaultCompactContent,
-    onUpdate: ({ editor }) => {
-      updateSlashMenu(editor);
-    },
-    onSelectionUpdate: ({ editor }) => {
-      updateSlashMenu(editor);
-    },
-    editorProps: {
-      handleKeyDown: (_view, event) => {
-        if (!slashStateRef.current.open) return false;
-        const commands = filteredCommandsRef.current;
-        if (commands.length === 0) return false;
-        if (event.key === "ArrowDown") {
-          event.preventDefault();
-          setSlashIndex((prev) => (prev + 1) % commands.length);
-          return true;
-        }
-        if (event.key === "ArrowUp") {
-          event.preventDefault();
-          setSlashIndex(
-            (prev) => (prev - 1 + commands.length) % commands.length
-          );
-          return true;
-        }
-        if (event.key === "Enter") {
-          event.preventDefault();
-          const command = commands[slashIndexRef.current];
-          const currentEditor = editorRef.current;
-          if (command && currentEditor) {
-            runSlashCommand(command, currentEditor);
-            return true;
-          }
-        }
-        if (event.key === "Escape") {
-          event.preventDefault();
-          setSlashState({
-            open: false,
-            query: "",
-            range: null,
-            position: null,
-          });
-          return true;
-        }
-        return false;
-      },
-    },
-  });
-  const isLongForm = postType === "long";
-  const activeEditor = isLongForm ? editor : compactEditor;
-
-  const clampValue = (value: number, min: number, max: number) =>
-    Math.min(Math.max(value, min), max);
-
-  const updateMinimapViewport = () => {
-    const contentRoot = editorBodyRef.current?.querySelector(
-      ".tiptap"
-    ) as HTMLElement | null;
-    if (!contentRoot) return;
-    const headerHeight = headerRef.current?.getBoundingClientRect().height ?? 0;
-    const rect = contentRoot.getBoundingClientRect();
-    const contentTop = rect.top + window.scrollY;
-    const contentHeight = contentRoot.scrollHeight;
-    const scrollTop = window.scrollY - contentTop + headerHeight;
-    const viewportHeight = Math.max(0, window.innerHeight - headerHeight);
-    setMinimapMeta({
-      contentTop,
-      contentHeight,
-      scrollTop,
-      viewportHeight,
-      headerHeight,
-    });
-  };
-
-  const rebuildMinimapBlocks = () => {
-    const contentRoot = editorBodyRef.current?.querySelector(
-      ".tiptap"
-    ) as HTMLElement | null;
-    if (!contentRoot) return;
-    const contentHeight = contentRoot.scrollHeight;
-    if (contentHeight <= 0) return;
-    const blocks = Array.from(contentRoot.children).map((node) => {
-      const element = node as HTMLElement;
-      const tag = element.tagName.toLowerCase();
-      const variant =
-        tag === "post-title"
-          ? "title"
-          : tag.startsWith("h")
-            ? "heading"
-            : tag === "figure"
-              ? "media"
-              : "text";
-      return {
-        top: element.offsetTop / contentHeight,
-        height: Math.max(element.offsetHeight / contentHeight, 0.01),
-        variant,
-      };
-    });
-    setMinimapBlocks(blocks);
-    updateMinimapViewport();
-  };
-
-  const scheduleMinimapUpdate = (mode: "viewport" | "full") => {
-    if (minimapRafRef.current) return;
-    minimapRafRef.current = window.requestAnimationFrame(() => {
-      minimapRafRef.current = null;
-      if (mode === "full") {
-        rebuildMinimapBlocks();
-      } else {
-        updateMinimapViewport();
-      }
-    });
-  };
-
-  const scrollFromMinimap = (
-    event: ReactPointerEvent<HTMLDivElement>,
-    behavior: ScrollBehavior
-  ) => {
-    const track = minimapTrackRef.current;
-    if (!track) return;
-    const rect = track.getBoundingClientRect();
-    const ratio = clampValue((event.clientY - rect.top) / rect.height, 0, 1);
-    const target =
-      minimapMeta.contentTop +
-      ratio * minimapMeta.contentHeight -
-      minimapMeta.headerHeight -
-      minimapMeta.viewportHeight / 2;
-    const minScroll = minimapMeta.contentTop - minimapMeta.headerHeight;
-    const maxScroll = Math.max(
-      minScroll,
-      minimapMeta.contentTop + minimapMeta.contentHeight - window.innerHeight
-    );
-    const top = clampValue(target, minScroll, maxScroll);
-    window.scrollTo({ top, behavior });
-  };
+  const activeEditor = editor;
 
   const slashCommands = useMemo(
     (): SlashCommand[] => [
@@ -590,22 +397,6 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
   }, [filteredCommands]);
 
   useEffect(() => {
-    if (!editor || !isLongForm) return;
-    rebuildMinimapBlocks();
-    const handleUpdate = () => scheduleMinimapUpdate("full");
-    const handleScroll = () => scheduleMinimapUpdate("viewport");
-    const handleResize = () => scheduleMinimapUpdate("full");
-    editor.on("update", handleUpdate);
-    window.addEventListener("scroll", handleScroll, true);
-    window.addEventListener("resize", handleResize);
-    return () => {
-      editor.off("update", handleUpdate);
-      window.removeEventListener("scroll", handleScroll, true);
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [editor, isLongForm]);
-
-  useEffect(() => {
     if (!activeEditor || !slashState.open) return;
     const handleViewportChange = () => updateSlashMenu(activeEditor);
     window.addEventListener("scroll", handleViewportChange, true);
@@ -616,27 +407,6 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
     };
   }, [activeEditor, slashState.open]);
 
-  useEffect(() => {
-    postTypeRef.current = postType;
-  }, [postType]);
-
-  useEffect(() => {
-    if (!editor || !compactEditor) return;
-    const previousType = previousTypeRef.current;
-    if (previousType === postType) return;
-    if (postType === "long") {
-      const compactContent = compactEditor.getJSON();
-      editor.commands.setContent(
-        normalizeDocContent(compactContent, title),
-        false
-      );
-    } else {
-      const longContent = editor.getJSON();
-      compactEditor.commands.setContent(stripTitleNode(longContent), false);
-    }
-    previousTypeRef.current = postType;
-  }, [compactEditor, editor, postType, title]);
-
   const selectedImage = useMemo(
     () => libraryImages.find((image) => image.id === selectedImageId) ?? null,
     [libraryImages, selectedImageId]
@@ -645,20 +415,8 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
   const handleSave = () => {
     if (!activeEditor) return;
     const rawContent = activeEditor.getJSON();
-    const nextTitle =
-      postType === "long" ? extractTitle(rawContent) : title.trim();
-    const content =
-      postType === "long"
-        ? normalizeDocContent(rawContent, nextTitle)
-        : stripTitleNode(rawContent);
-    const trimmedUrl = reactionUrl.trim();
-    const meta =
-      postType === "reaction"
-        ? {
-            sourceKind: reactionKind,
-            ...(trimmedUrl ? { sourceUrl: trimmedUrl } : {}),
-          }
-        : {};
+    const nextTitle = extractTitle(rawContent);
+    const content = normalizeDocContent(rawContent, nextTitle);
     const nextPublishedAt =
       publishedAt || (status === "published" ? new Date().toISOString() : "");
     startTransition(async () => {
@@ -667,15 +425,16 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
         title: nextTitle,
         status,
         content,
-        type: postType,
-        meta,
         publishedAt: nextPublishedAt || undefined,
       });
-      setLastSavedAt(new Date().toISOString());
       setTitle(nextTitle);
       setPublishedAt(nextPublishedAt);
       if (post.id === "new" && result.id) {
-        router.replace(`/cms/posts/${result.id}`);
+        await router.navigate({
+          to: "/cms/posts/$id",
+          params: { id: result.id },
+          replace: true,
+        });
       }
     });
   };
@@ -722,8 +481,6 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
 
   const longEditorClass =
     "w-full [&_.tiptap]:mx-auto [&_.tiptap]:w-full [&_.tiptap]:max-w-3xl [&_.tiptap]:px-6 [&_.tiptap]:py-12 [&_.tiptap]:min-h-full [&_.tiptap]:outline-none [&_.tiptap]:prose [&_.tiptap]:prose-lg [&_.tiptap]:text-gray-900 [&_.tiptap\\ h1]:mb-6 [&_.tiptap\\ h1]:mt-4 [&_.tiptap\\ h1]:text-4xl [&_.tiptap\\ h1]:font-semibold [&_.tiptap\\ h1]:tracking-tight [&_.tiptap\\ figure]:my-6 [&_.tiptap\\ figure]:overflow-hidden [&_.tiptap\\ figure]:rounded-xl [&_.tiptap\\ figure]:border [&_.tiptap\\ figure]:border-gray-200 [&_.tiptap\\ figure]:bg-white [&_.tiptap\\ figure\\ img]:w-full [&_.tiptap\\ figure\\ img]:object-cover [&_.tiptap\\ figcaption]:px-4 [&_.tiptap\\ figcaption]:py-3 [&_.tiptap\\ figcaption]:text-sm [&_.tiptap\\ figcaption]:text-gray-600 [&_.is-empty::before]:float-left [&_.is-empty::before]:h-0 [&_.is-empty::before]:text-gray-400 [&_.is-empty::before]:pointer-events-none [&_.is-empty::before]:content-[attr(data-placeholder)]";
-  const compactEditorClass =
-    "w-full [&_.tiptap]:w-full [&_.tiptap]:min-h-[10rem] [&_.tiptap]:px-4 [&_.tiptap]:py-4 [&_.tiptap]:outline-none [&_.tiptap]:prose [&_.tiptap]:prose-base [&_.tiptap]:text-gray-900 [&_.tiptap\\ figure]:my-4 [&_.tiptap\\ figure]:overflow-hidden [&_.tiptap\\ figure]:rounded-xl [&_.tiptap\\ figure]:border [&_.tiptap\\ figure]:border-gray-200 [&_.tiptap\\ figure]:bg-white [&_.tiptap\\ figure\\ img]:w-full [&_.tiptap\\ figure\\ img]:object-cover [&_.tiptap\\ figcaption]:px-4 [&_.tiptap\\ figcaption]:py-3 [&_.tiptap\\ figcaption]:text-sm [&_.tiptap\\ figcaption]:text-gray-600 [&_.is-empty::before]:float-left [&_.is-empty::before]:h-0 [&_.is-empty::before]:text-gray-400 [&_.is-empty::before]:pointer-events-none [&_.is-empty::before]:content-[attr(data-placeholder)]";
 
   return (
     <>
@@ -884,10 +641,7 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
           </SheetFooter>
         </SheetContent>
       </Sheet>
-      <header
-        ref={headerRef}
-        className="flex min-h-16 flex-wrap items-center gap-3 border-b px-4 py-2 sticky top-0 z-10 bg-white"
-      >
+      <header className="flex min-h-16 flex-wrap items-center gap-3 border-b px-4 py-2 sticky top-0 z-10 bg-white">
         <SidebarTrigger className="-ml-1" />
         <Separator
           orientation="vertical"
@@ -917,26 +671,6 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
             <ImageIcon className="mr-2 size-4" />
             Images
           </Button>
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <label
-              className="text-xs font-medium uppercase tracking-wide"
-              htmlFor="postType"
-            >
-              Type
-            </label>
-            <select
-              id="postType"
-              value={postType}
-              onChange={(event) =>
-                setPostType(event.target.value as Post["type"])
-              }
-              className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-950"
-            >
-              <option value="long">Long form</option>
-              <option value="short">Short form</option>
-              <option value="reaction">Reaction</option>
-            </select>
-          </div>
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <label
               className="text-xs font-medium uppercase tracking-wide"
@@ -984,15 +718,10 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
           </div>
         </div>
       </header>
-      <div
-        className={
-          isLongForm ? "flex flex-1 bg-white" : "flex flex-1 bg-gray-50"
-        }
-      >
+      <div className="flex flex-1 bg-white">
         {activeEditor ? (
           <BubbleMenu
             editor={activeEditor}
-            tippyOptions={{ duration: 100, maxWidth: "none", placement: "top" }}
             shouldShow={({ editor, state }) => {
               const { selection } = state;
               return !selection.empty && !editor.isActive("title");
@@ -1004,10 +733,10 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
                 variant="ghost"
                 size="icon-sm"
                 className={toolbarButtonClass}
-                data-active={editor.isActive("bold")}
-                aria-pressed={editor.isActive("bold")}
+                data-active={activeEditor.isActive("bold")}
+                aria-pressed={activeEditor.isActive("bold")}
                 aria-label="Toggle bold"
-                onClick={() => editor.chain().focus().toggleBold().run()}
+                onClick={() => activeEditor.chain().focus().toggleBold().run()}
               >
                 <Bold className="size-4" />
               </Button>
@@ -1016,10 +745,10 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
                 variant="ghost"
                 size="icon-sm"
                 className={toolbarButtonClass}
-                data-active={editor.isActive("italic")}
-                aria-pressed={editor.isActive("italic")}
+                data-active={activeEditor.isActive("italic")}
+                aria-pressed={activeEditor.isActive("italic")}
                 aria-label="Toggle italic"
-                onClick={() => editor.chain().focus().toggleItalic().run()}
+                onClick={() => activeEditor.chain().focus().toggleItalic().run()}
               >
                 <Italic className="size-4" />
               </Button>
@@ -1028,10 +757,10 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
                 variant="ghost"
                 size="icon-sm"
                 className={toolbarButtonClass}
-                data-active={editor.isActive("strike")}
-                aria-pressed={editor.isActive("strike")}
+                data-active={activeEditor.isActive("strike")}
+                aria-pressed={activeEditor.isActive("strike")}
                 aria-label="Toggle strikethrough"
-                onClick={() => editor.chain().focus().toggleStrike().run()}
+                onClick={() => activeEditor.chain().focus().toggleStrike().run()}
               >
                 <Strikethrough className="size-4" />
               </Button>
@@ -1041,11 +770,11 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
                 variant="ghost"
                 size="icon-sm"
                 className={toolbarButtonClass}
-                data-active={editor.isActive("heading", { level: 2 })}
-                aria-pressed={editor.isActive("heading", { level: 2 })}
+                data-active={activeEditor.isActive("heading", { level: 2 })}
+                aria-pressed={activeEditor.isActive("heading", { level: 2 })}
                 aria-label="Toggle heading"
                 onClick={() =>
-                  editor.chain().focus().toggleHeading({ level: 2 }).run()
+                  activeEditor.chain().focus().toggleHeading({ level: 2 }).run()
                 }
               >
                 <Heading2 className="size-4" />
@@ -1055,10 +784,10 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
                 variant="ghost"
                 size="icon-sm"
                 className={toolbarButtonClass}
-                data-active={editor.isActive("code")}
-                aria-pressed={editor.isActive("code")}
+                data-active={activeEditor.isActive("code")}
+                aria-pressed={activeEditor.isActive("code")}
                 aria-label="Toggle inline code"
-                onClick={() => editor.chain().focus().toggleCode().run()}
+                onClick={() => activeEditor.chain().focus().toggleCode().run()}
               >
                 <Code className="size-4" />
               </Button>
@@ -1068,10 +797,10 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
                 variant="ghost"
                 size="icon-sm"
                 className={toolbarButtonClass}
-                data-active={editor.isActive("bulletList")}
-                aria-pressed={editor.isActive("bulletList")}
+                data-active={activeEditor.isActive("bulletList")}
+                aria-pressed={activeEditor.isActive("bulletList")}
                 aria-label="Toggle bulleted list"
-                onClick={() => editor.chain().focus().toggleBulletList().run()}
+                onClick={() => activeEditor.chain().focus().toggleBulletList().run()}
               >
                 <List className="size-4" />
               </Button>
@@ -1080,10 +809,10 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
                 variant="ghost"
                 size="icon-sm"
                 className={toolbarButtonClass}
-                data-active={editor.isActive("orderedList")}
-                aria-pressed={editor.isActive("orderedList")}
+                data-active={activeEditor.isActive("orderedList")}
+                aria-pressed={activeEditor.isActive("orderedList")}
                 aria-label="Toggle numbered list"
-                onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                onClick={() => activeEditor.chain().focus().toggleOrderedList().run()}
               >
                 <ListOrdered className="size-4" />
               </Button>
@@ -1092,10 +821,10 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
                 variant="ghost"
                 size="icon-sm"
                 className={toolbarButtonClass}
-                data-active={editor.isActive("blockquote")}
-                aria-pressed={editor.isActive("blockquote")}
+                data-active={activeEditor.isActive("blockquote")}
+                aria-pressed={activeEditor.isActive("blockquote")}
                 aria-label="Toggle blockquote"
-                onClick={() => editor.chain().focus().toggleBlockquote().run()}
+                onClick={() => activeEditor.chain().focus().toggleBlockquote().run()}
               >
                 <Quote className="size-4" />
               </Button>
@@ -1154,146 +883,9 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
             </div>
           </div>
         ) : null}
-        {isLongForm ? (
-          <>
-            <div ref={editorBodyRef} className="flex-1">
-              <EditorContent
-                editor={activeEditor}
-                className={longEditorClass}
-              />
-            </div>
-            <aside className="relative hidden w-24 shrink-0 pr-4 lg:block">
-              <div className="sticky top-24">
-                <div
-                  ref={minimapTrackRef}
-                  className="relative h-[calc(100vh-10rem)] rounded-xl border border-gray-200 bg-gray-50 shadow-inner"
-                  onPointerDown={(event) => {
-                    minimapDraggingRef.current = true;
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                    scrollFromMinimap(event, "auto");
-                  }}
-                  onPointerMove={(event) => {
-                    if (!minimapDraggingRef.current) return;
-                    scrollFromMinimap(event, "auto");
-                  }}
-                  onPointerUp={() => {
-                    minimapDraggingRef.current = false;
-                  }}
-                  onClick={(event) => scrollFromMinimap(event, "smooth")}
-                >
-                  {minimapMeta.contentHeight > 0
-                    ? minimapBlocks.map((block, index) => (
-                        <div
-                          key={`${block.variant}-${index}`}
-                          className={`absolute left-2 right-2 rounded-sm ${
-                            block.variant === "title"
-                              ? "bg-gray-900"
-                              : block.variant === "heading"
-                                ? "bg-gray-600"
-                                : block.variant === "media"
-                                  ? "bg-gray-400"
-                                  : "bg-gray-300"
-                          }`}
-                          style={{
-                            top: `${block.top * 100}%`,
-                            height: `${block.height * 100}%`,
-                          }}
-                        />
-                      ))
-                    : null}
-                  {minimapMeta.contentHeight > 0 ? (
-                    <div
-                      className="absolute left-1 right-1 rounded-md border border-gray-900/30 bg-gray-900/10"
-                      style={{
-                        top: `${clampValue(
-                          (minimapMeta.scrollTop / minimapMeta.contentHeight) *
-                            100,
-                          0,
-                          100
-                        )}%`,
-                        height: `${clampValue(
-                          (minimapMeta.viewportHeight /
-                            minimapMeta.contentHeight) *
-                            100,
-                          6,
-                          100
-                        )}%`,
-                      }}
-                    />
-                  ) : null}
-                </div>
-              </div>
-            </aside>
-          </>
-        ) : (
-          <div className="flex flex-1 justify-center px-6 py-10">
-            <div className="w-full max-w-2xl space-y-6">
-              <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-6">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Title
-                  </label>
-                  <Input
-                    type="text"
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                    placeholder="Add a title..."
-                  />
-                </div>
-                {postType === "reaction" ? (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-1">
-                      <label
-                        className="text-xs font-medium uppercase tracking-wide text-gray-500"
-                        htmlFor="reactionKind"
-                      >
-                        Source
-                      </label>
-                      <select
-                        id="reactionKind"
-                        value={reactionKind}
-                        onChange={(event) =>
-                          setReactionKind(
-                            event.target.value as "tweet" | "url" | "video"
-                          )
-                        }
-                        className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-950"
-                      >
-                        <option value="tweet">Tweet / X</option>
-                        <option value="url">Link</option>
-                        <option value="video">Video</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label
-                        className="text-xs font-medium uppercase tracking-wide text-gray-500"
-                        htmlFor="reactionUrl"
-                      >
-                        URL
-                      </label>
-                      <Input
-                        id="reactionUrl"
-                        type="url"
-                        value={reactionUrl}
-                        onChange={(event) => setReactionUrl(event.target.value)}
-                        placeholder="https://"
-                      />
-                    </div>
-                  </div>
-                ) : null}
-                <div
-                  ref={editorBodyRef}
-                  className="rounded-xl border border-gray-200 bg-gray-50"
-                >
-                  <EditorContent
-                    editor={activeEditor}
-                    className={compactEditorClass}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <div className="flex-1">
+          <EditorContent editor={activeEditor} className={longEditorClass} />
+        </div>
       </div>
     </>
   );

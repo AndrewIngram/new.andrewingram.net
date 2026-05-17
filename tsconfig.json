@@ -26,9 +26,6 @@
     "plugins": [
       {
         "name": "@effect/language-service"
-      },
-      {
-        "name": "next"
       }
     ],
     "paths": {
@@ -37,18 +34,16 @@
       ]
     },
     "types": [
-      "./worker-configuration.d.ts",
+      // "./worker-configuration.d.ts",
       "./types/env.d.ts"
     ],
     "target": "ES2022"
   },
   "include": [
-    "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts",
     "alchemy.run.ts",
-    ".next/dev/types/**/*.ts"
+    "src/routeTree.gen.ts"
   ],
   "exclude": [
     "node_modules"

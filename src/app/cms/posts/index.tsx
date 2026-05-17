@@ -6,17 +6,28 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import Link from "next/link";
-import { columns } from "./columns";
-import { DataTable } from "./data-table";
-import { Button } from "@/components/ui/button";
 import { getAllPosts } from "@/lib/posts";
 import { AppRuntime } from "@/lib/runtime";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { createServerFn } from "@tanstack/react-start";
 
-export default async function Page() {
-  const data = await AppRuntime.runPromise(getAllPosts());
+import { columns } from "./-columns";
+import { DataTable } from "./-data-table";
+
+const getPosts = createServerFn({ method: "GET" }).handler(() =>
+  AppRuntime.runPromise(getAllPosts())
+);
+
+export const Route = createFileRoute("/cms/posts/")({
+  loader: () => getPosts(),
+  component: PostsIndex,
+});
+
+function PostsIndex() {
+  const data = Route.useLoaderData();
 
   return (
     <>
@@ -41,7 +52,9 @@ export default async function Page() {
         </div>
         <div className="flex items-center gap-2">
           <Button asChild>
-            <Link href="/cms/posts/new">New post</Link>
+            <Link to="/cms/posts/$id" params={{ id: "new" }}>
+              New post
+            </Link>
           </Button>
         </div>
       </header>

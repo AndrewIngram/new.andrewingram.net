@@ -2,7 +2,7 @@ import { Data, Effect } from "effect";
 import * as Schema from "effect/Schema";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { FileSystem } from "@effect/platform";
+import { env } from "@/env";
 
 const ImageSchema = Schema.Struct({
   id: Schema.String,
@@ -40,9 +40,7 @@ export class ImagesSaveError extends Data.TaggedError("ImagesSaveError")<{
   cause: unknown;
 }> {}
 
-export class ImagesMetadataError extends Data.TaggedError(
-  "ImagesMetadataError",
-)<{
+export class ImagesMetadataError extends Data.TaggedError("ImagesMetadataError")<{
   id: string;
   missing: ReadonlyArray<string>;
 }> {}
@@ -56,19 +54,8 @@ export class ImagesDeleteError extends Data.TaggedError("ImagesDeleteError")<{
   cause: unknown;
 }> {}
 
-const DATA_ROOT = process.env.POSTS_DATA_DIR ?? process.cwd();
-const DATA_DIR = path.join(DATA_ROOT, "data", "images");
-const FILES_DIR = path.join(process.cwd(), "src", "public", "uploads");
-
-const ensureDataDir = Effect.gen(function* (_) {
-  const fs = yield* FileSystem.FileSystem;
-  yield* _(fs.makeDirectory(DATA_DIR, { recursive: true }));
-});
-
-const ensureFilesDir = Effect.gen(function* (_) {
-  const fs = yield* FileSystem.FileSystem;
-  yield* _(fs.makeDirectory(FILES_DIR, { recursive: true }));
-});
+const metadataKey = (id: string) => `metadata/${id}.json`;
+const fileKey = (fileName: string) => `files/${fileName}`;
 
 const parseJson = (input: string): Effect.Effect<unknown, ImagesParseError> =>
   Effect.try({
@@ -80,61 +67,72 @@ const decodeImage = (
   raw: unknown,
   label: string,
 ): Effect.Effect<ImageAsset, ImagesDecodeError> =>
-  Schema.decodeUnknown(ImageSchema)(raw).pipe(
+  Schema.decodeUnknownEffect(ImageSchema)(raw).pipe(
     Effect.mapError((cause) => new ImagesDecodeError({ label, cause })),
   );
 
-const readImageFile = (filePath: string, label: string) =>
-  Effect.gen(function* (_) {
-    const fs = yield* FileSystem.FileSystem;
-    const raw = yield* fs.readFileString(filePath);
-    const json = yield* _(parseJson(raw));
-    return yield* _(decodeImage(json, label));
+const readImageMetadata = (id: string, label = id) =>
+  Effect.gen(function* () {
+    const object = yield* Effect.tryPromise(() => env.IMAGES.get(metadataKey(id)));
+    if (!object) {
+      return yield* Effect.fail(new ImagesLoadError({ id, cause: "Not found" }));
+    }
+    const raw = yield* Effect.tryPromise(() => object.text());
+    const json = yield* parseJson(raw);
+    return yield* decodeImage(json, label);
   });
 
-const isNoEntryError = (
-  error: unknown,
-): error is {
-  readonly _tag: "SystemError";
-  readonly reason: "NotFound";
-} =>
-  typeof error === "object" &&
-  error !== null &&
-  "_tag" in error &&
-  "reason" in error &&
-  (error as { _tag?: string })._tag === "SystemError" &&
-  (error as { reason?: string }).reason === "NotFound";
-
-export const getImageFilePath = (fileName: string) =>
-  path.join(FILES_DIR, fileName);
-
 export const getAllImages = () =>
-  Effect.gen(function* (_) {
-    const fs = yield* FileSystem.FileSystem;
-    yield* _(ensureDataDir);
-    const entries = yield* fs.readDirectory(DATA_DIR);
-    const jsonFiles = entries.filter((entry) => entry.endsWith(".json"));
-    const images = yield* _(
-      Effect.forEach(
-        jsonFiles,
-        (entry) => readImageFile(path.join(DATA_DIR, entry), entry),
-        { concurrency: "unbounded" },
-      ),
+  Effect.gen(function* () {
+    const keys = yield* Effect.tryPromise(async () => {
+      const keys: string[] = [];
+      let cursor: string | undefined;
+
+      do {
+        const result = await env.IMAGES.list({
+          prefix: "metadata/",
+          ...(cursor ? { cursor } : {}),
+        });
+        keys.push(...result.objects.map((object) => object.key));
+        cursor = result.truncated ? result.cursor : undefined;
+      } while (cursor);
+
+      return keys;
+    });
+
+    const images = yield* Effect.forEach(
+      keys,
+      (key) => {
+        const id = path.basename(key, ".json");
+        return readImageMetadata(id, key);
+      },
+      { concurrency: "unbounded" },
     );
+
     return images.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }).pipe(
-    Effect.catchTag("SystemError", (cause) =>
-      Effect.fail(new ImagesLoadAllError({ cause })),
-    ),
+    Effect.mapError((cause) => new ImagesLoadAllError({ cause })),
   );
 
 export const getImageById = (id: string) =>
-  Effect.gen(function* (_) {
-    yield* _(ensureDataDir);
-    return yield* _(readImageFile(path.join(DATA_DIR, `${id}.json`), id));
+  readImageMetadata(id).pipe(
+    Effect.mapError((cause) =>
+      cause instanceof ImagesLoadError ? cause : new ImagesLoadError({ id, cause }),
+    ),
+  );
+
+export const getImageBodyById = (id: string) =>
+  Effect.gen(function* () {
+    const image = yield* getImageById(id);
+    const object = yield* Effect.tryPromise(() => env.IMAGES.get(fileKey(image.fileName)));
+    if (!object) {
+      return yield* Effect.fail(new ImagesLoadError({ id, cause: "File not found" }));
+    }
+    const data = yield* Effect.tryPromise(() => object.arrayBuffer());
+    return { image, data };
   }).pipe(
-    Effect.catchTag("SystemError", (cause) =>
-      Effect.fail(new ImagesLoadError({ id, cause })),
+    Effect.mapError((cause) =>
+      cause instanceof ImagesLoadError ? cause : new ImagesLoadError({ id, cause }),
     ),
   );
 
@@ -150,19 +148,14 @@ export type SaveImageInput = {
 export const saveImage = (input: SaveImageInput) => {
   const resolvedId = input.id === "new" ? randomUUID() : input.id;
 
-  return Effect.gen(function* (_) {
-    const fs = yield* FileSystem.FileSystem;
-    yield* _(ensureDataDir);
+  return Effect.gen(function* () {
     const now = new Date().toISOString();
-    const filePath = path.join(DATA_DIR, `${resolvedId}.json`);
 
-    const existing = yield* _(
-      readImageFile(filePath, filePath).pipe(
-        Effect.catchTag("SystemError", (cause) =>
-          isNoEntryError(cause)
-            ? Effect.succeed(null)
-            : Effect.fail(new ImagesSaveError({ id: resolvedId, cause })),
-        ),
+    const existing = yield* readImageMetadata(resolvedId).pipe(
+      Effect.catchTag("ImagesLoadError", (cause) =>
+        cause.cause === "Not found"
+          ? Effect.succeed(null)
+          : Effect.fail(new ImagesSaveError({ id: resolvedId, cause })),
       ),
     );
 
@@ -171,12 +164,7 @@ export const saveImage = (input: SaveImageInput) => {
     const mimeType = input.mimeType ?? existing?.mimeType;
     const size = input.size ?? existing?.size;
 
-    if (
-      fileName == null ||
-      originalName == null ||
-      mimeType == null ||
-      size == null
-    ) {
+    if (fileName == null || originalName == null || mimeType == null || size == null) {
       const missing = [
         fileName == null ? "fileName" : null,
         originalName == null ? "originalName" : null,
@@ -184,9 +172,7 @@ export const saveImage = (input: SaveImageInput) => {
         size == null ? "size" : null,
       ].filter((value): value is string => value !== null);
 
-      return yield* _(
-        Effect.fail(new ImagesMetadataError({ id: resolvedId, missing })),
-      );
+      return yield* Effect.fail(new ImagesMetadataError({ id: resolvedId, missing }));
     }
 
     const image: ImageAsset = {
@@ -200,11 +186,15 @@ export const saveImage = (input: SaveImageInput) => {
       updatedAt: now,
     };
 
-    yield* _(fs.writeFileString(filePath, JSON.stringify(image, null, 2)));
+    yield* Effect.tryPromise(() =>
+      env.IMAGES.put(metadataKey(resolvedId), JSON.stringify(image, null, 2), {
+        httpMetadata: { contentType: "application/json" },
+      }),
+    );
     return image;
   }).pipe(
-    Effect.catchTag("SystemError", (cause) =>
-      Effect.fail(new ImagesSaveError({ id: resolvedId, cause })),
+    Effect.mapError((cause) =>
+      cause instanceof ImagesSaveError ? cause : new ImagesSaveError({ id: resolvedId, cause }),
     ),
   );
 };
@@ -218,18 +208,18 @@ export type ImageUploadInput = {
 };
 
 export const saveImageUpload = (input: ImageUploadInput) =>
-  Effect.gen(function* (_) {
-    const fs = yield* FileSystem.FileSystem;
-    yield* _(ensureDataDir);
-    yield* _(ensureFilesDir);
+  Effect.gen(function* () {
     const now = new Date().toISOString();
     const id = randomUUID();
     const safeName = path.basename(input.originalName);
     const ext = path.extname(safeName);
     const fileName = `${id}${ext}`;
-    const filePath = path.join(FILES_DIR, fileName);
 
-    yield* _(fs.writeFile(filePath, input.data));
+    yield* Effect.tryPromise(() =>
+      env.IMAGES.put(fileKey(fileName), input.data, {
+        httpMetadata: { contentType: input.mimeType },
+      }),
+    );
 
     const image: ImageAsset = {
       id,
@@ -242,38 +232,21 @@ export const saveImageUpload = (input: ImageUploadInput) =>
       updatedAt: now,
     };
 
-    yield* _(
-      fs.writeFileString(
-        path.join(DATA_DIR, `${id}.json`),
-        JSON.stringify(image, null, 2),
-      ),
+    yield* Effect.tryPromise(() =>
+      env.IMAGES.put(metadataKey(id), JSON.stringify(image, null, 2), {
+        httpMetadata: { contentType: "application/json" },
+      }),
     );
 
     return image;
   }).pipe(
-    Effect.catchTag("SystemError", (cause) =>
-      Effect.fail(new ImagesUploadError({ cause })),
-    ),
+    Effect.mapError((cause) => new ImagesUploadError({ cause })),
   );
 
 export const deleteImage = (id: string) =>
-  Effect.gen(function* (_) {
-    const fs = yield* FileSystem.FileSystem;
-    const existing = yield* _(getImageById(id));
-    const metaPath = path.join(DATA_DIR, `${id}.json`);
-    const filePath = getImageFilePath(existing.fileName);
-
-    yield* _(
-      fs.remove(filePath).pipe(
-        Effect.catchTag("SystemError", (cause) =>
-          isNoEntryError(cause) ? Effect.succeed(undefined) : Effect.fail(cause),
-        ),
-      ),
+  Effect.gen(function* () {
+    const existing = yield* getImageById(id);
+    yield* Effect.tryPromise(() =>
+      env.IMAGES.delete([fileKey(existing.fileName), metadataKey(id)]),
     );
-
-    yield* _(fs.remove(metaPath));
-  }).pipe(
-    Effect.catchAll((cause) =>
-      Effect.fail(new ImagesDeleteError({ id, cause })),
-    ),
-  );
+  }).pipe(Effect.catch((cause) => Effect.fail(new ImagesDeleteError({ id, cause }))));

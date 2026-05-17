@@ -1,0 +1,1 @@
+ALTER TABLE `posts` ADD `status` text DEFAULT 'draft' NOT NULL;

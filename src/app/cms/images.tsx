@@ -1,4 +1,6 @@
-import Link from "next/link";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { createServerFn, useServerFn } from "@tanstack/react-start";
+import type { FormEvent } from "react";
 
 import {
   Breadcrumb,
@@ -15,10 +17,28 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { AppRuntime } from "@/lib/runtime";
 import { getAllImages } from "@/lib/images";
 
-import { uploadImageAction } from "./actions";
+import { uploadImageAction } from "./-image-actions";
 
-export default async function Page() {
-  const images = await AppRuntime.runPromise(getAllImages());
+const getImages = createServerFn({ method: "GET" }).handler(() =>
+  AppRuntime.runPromise(getAllImages())
+);
+
+export const Route = createFileRoute("/cms/images")({
+  loader: () => getImages(),
+  component: ImagesPage,
+});
+
+function ImagesPage() {
+  const router = useRouter();
+  const images = Route.useLoaderData();
+  const uploadImage = useServerFn(uploadImageAction);
+
+  async function onUpload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await uploadImage({ data: new FormData(event.currentTarget) });
+    event.currentTarget.reset();
+    await router.invalidate();
+  }
 
   return (
     <>
@@ -41,7 +61,7 @@ export default async function Page() {
         </Breadcrumb>
         <div className="ml-auto flex items-center gap-2">
           <Button asChild variant="outline">
-            <Link href="/cms/posts">Posts</Link>
+            <Link to="/cms/posts">Posts</Link>
           </Button>
         </div>
       </header>
@@ -52,7 +72,7 @@ export default async function Page() {
             Add an image and an optional caption for the library.
           </p>
           <form
-            action={uploadImageAction}
+            onSubmit={onUpload}
             className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end"
           >
             <div className="flex-1">

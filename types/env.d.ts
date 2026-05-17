@@ -1,14 +1,13 @@
-// Auto-generated Cloudflare binding types.
-// @see https://alchemy.run/concepts/bindings/#type-safe-bindings
+import type { WorkerEnv } from "../alchemy.run.ts";
 
-import type { worker } from "../alchemy.run.ts";
+type AlchemyCloudflareEnv = WorkerEnv;
 
 declare global {
-  type CloudflareEnv = typeof worker.Env;
+  type CloudflareEnv = AlchemyCloudflareEnv;
 }
 
 declare module "cloudflare:workers" {
   namespace Cloudflare {
-    export interface Env extends CloudflareEnv {}
+    export interface Env extends AlchemyCloudflareEnv {}
   }
 }

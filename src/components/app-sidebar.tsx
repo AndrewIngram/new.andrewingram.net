@@ -6,7 +6,6 @@ import { ImageIcon, SquareTerminal } from "lucide-react"
 import { NavMain } from "@/components/nav-main"
 import { Sidebar, SidebarContent } from "@/components/ui/sidebar"
 
-// This is sample data.
 const data = {
   navMain: [
     {
