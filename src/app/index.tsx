@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 
 import { getAllPosts } from "@/lib/posts";
@@ -26,7 +26,7 @@ function Home() {
       <header className="site-header">
         <nav>
           <a className="site-title" href="javascript:;">
-            Andrew Ingram
+            Andrew&nbsp;Ingram
           </a>
 
           <div className="nav-links">
@@ -40,7 +40,17 @@ function Home() {
         {data.map((post) => (
           <article className="post" key={post.id}>
             <header>
-              <h1>{post.title}</h1>
+              <h1>
+                <Link to="/posts/$slug" params={{ slug: post.slug }}>
+                  {post.status === "draft" ? (
+                    <>
+                      <span className="chip">Draft</span> {post.title}
+                    </>
+                  ) : (
+                    post.title
+                  )}
+                </Link>
+              </h1>
             </header>
           </article>
         ))}

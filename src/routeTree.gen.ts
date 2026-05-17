@@ -14,6 +14,7 @@ import { Route as DashboardRouteImport } from './app/dashboard'
 import { Route as CmsRouteImport } from './app/cms'
 import { Route as IndexRouteImport } from './app/index'
 import { Route as CmsIndexRouteImport } from './app/cms/index'
+import { Route as PostsSlugRouteImport } from './app/posts/$slug'
 import { Route as ImagesIdRouteImport } from './app/images/$id'
 import { Route as CmsImagesRouteImport } from './app/cms/images'
 import { Route as CmsPostsIndexRouteImport } from './app/cms/posts/index'
@@ -44,6 +45,11 @@ const CmsIndexRoute = CmsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => CmsRoute,
 } as any)
+const PostsSlugRoute = PostsSlugRouteImport.update({
+  id: '/posts/$slug',
+  path: '/posts/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ImagesIdRoute = ImagesIdRouteImport.update({
   id: '/images/$id',
   path: '/images/$id',
@@ -72,6 +78,7 @@ export interface FileRoutesByFullPath {
   '/test': typeof TestRoute
   '/cms/images': typeof CmsImagesRoute
   '/images/$id': typeof ImagesIdRoute
+  '/posts/$slug': typeof PostsSlugRoute
   '/cms/': typeof CmsIndexRoute
   '/cms/posts/$id': typeof CmsPostsIdRoute
   '/cms/posts/': typeof CmsPostsIndexRoute
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/test': typeof TestRoute
   '/cms/images': typeof CmsImagesRoute
   '/images/$id': typeof ImagesIdRoute
+  '/posts/$slug': typeof PostsSlugRoute
   '/cms': typeof CmsIndexRoute
   '/cms/posts/$id': typeof CmsPostsIdRoute
   '/cms/posts': typeof CmsPostsIndexRoute
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/test': typeof TestRoute
   '/cms/images': typeof CmsImagesRoute
   '/images/$id': typeof ImagesIdRoute
+  '/posts/$slug': typeof PostsSlugRoute
   '/cms/': typeof CmsIndexRoute
   '/cms/posts/$id': typeof CmsPostsIdRoute
   '/cms/posts/': typeof CmsPostsIndexRoute
@@ -107,6 +116,7 @@ export interface FileRouteTypes {
     | '/test'
     | '/cms/images'
     | '/images/$id'
+    | '/posts/$slug'
     | '/cms/'
     | '/cms/posts/$id'
     | '/cms/posts/'
@@ -117,6 +127,7 @@ export interface FileRouteTypes {
     | '/test'
     | '/cms/images'
     | '/images/$id'
+    | '/posts/$slug'
     | '/cms'
     | '/cms/posts/$id'
     | '/cms/posts'
@@ -128,6 +139,7 @@ export interface FileRouteTypes {
     | '/test'
     | '/cms/images'
     | '/images/$id'
+    | '/posts/$slug'
     | '/cms/'
     | '/cms/posts/$id'
     | '/cms/posts/'
@@ -139,6 +151,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   TestRoute: typeof TestRoute
   ImagesIdRoute: typeof ImagesIdRoute
+  PostsSlugRoute: typeof PostsSlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -177,6 +190,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/cms/'
       preLoaderRoute: typeof CmsIndexRouteImport
       parentRoute: typeof CmsRoute
+    }
+    '/posts/$slug': {
+      id: '/posts/$slug'
+      path: '/posts/$slug'
+      fullPath: '/posts/$slug'
+      preLoaderRoute: typeof PostsSlugRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/images/$id': {
       id: '/images/$id'
@@ -231,6 +251,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   TestRoute: TestRoute,
   ImagesIdRoute: ImagesIdRoute,
+  PostsSlugRoute: PostsSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

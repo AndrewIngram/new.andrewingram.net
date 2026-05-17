@@ -15,6 +15,13 @@
       "when": 1768781950612,
       "tag": "0001_tired_robbie_robertson",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1779063900000,
+      "tag": "0002_add_post_slugs",
+      "breakpoints": true
     }
   ]
 }

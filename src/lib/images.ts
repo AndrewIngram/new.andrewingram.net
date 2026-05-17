@@ -121,15 +121,14 @@ export const getImageById = (id: string) =>
     ),
   );
 
-export const getImageBodyById = (id: string) =>
+export const getImageObjectById = (id: string) =>
   Effect.gen(function* () {
     const image = yield* getImageById(id);
     const object = yield* Effect.tryPromise(() => env.IMAGES.get(fileKey(image.fileName)));
     if (!object) {
       return yield* Effect.fail(new ImagesLoadError({ id, cause: "File not found" }));
     }
-    const data = yield* Effect.tryPromise(() => object.arrayBuffer());
-    return { image, data };
+    return { image, object };
   }).pipe(
     Effect.mapError((cause) =>
       cause instanceof ImagesLoadError ? cause : new ImagesLoadError({ id, cause }),

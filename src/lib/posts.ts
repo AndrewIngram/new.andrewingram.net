@@ -2,7 +2,8 @@ import { Data, Effect } from "effect";
 import * as Schema from "effect/Schema";
 import type { JSONContent } from "@tiptap/core";
 import { randomUUID } from "node:crypto";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
+import slugify from "slugify";
 import { getDbAsync } from "@/db";
 import { posts } from "@/db/schema";
 import { RecordNotFound } from "./errors";
@@ -10,6 +11,7 @@ import { RecordNotFound } from "./errors";
 const PostStatusSchema = Schema.Literals(["draft", "published", "archived"]);
 const PostSchema = Schema.Struct({
   id: Schema.String,
+  slug: Schema.String,
   title: Schema.String,
   status: PostStatusSchema,
   content: Schema.Unknown,
@@ -61,8 +63,41 @@ const parseContent = (value: unknown): JSONContent => {
   return value as JSONContent;
 };
 
+type Db = Awaited<ReturnType<typeof getDbAsync>>;
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+type PostRow = typeof posts.$inferSelect;
+
+const getBaseSlug = (title: string) =>
+  slugify(title, { lower: true, strict: true, trim: true }) || "post";
+
+const getUniqueSlug = async (
+  db: Db | Tx,
+  title: string,
+  excludeId?: string | null,
+) => {
+  const baseSlug = getBaseSlug(title);
+  let suffix = 1;
+
+  while (true) {
+    const slug = suffix === 1 ? baseSlug : `${baseSlug}-${suffix}`;
+    const rows = await db
+      .select({ id: posts.id })
+      .from(posts)
+      .where(
+        excludeId
+          ? and(eq(posts.slug, slug), ne(posts.id, excludeId))
+          : eq(posts.slug, slug),
+      )
+      .limit(1);
+
+    if (rows.length === 0) return slug;
+    suffix += 1;
+  }
+};
+
 const toPost = (row: typeof posts.$inferSelect): Post => ({
   id: row.id ?? "",
+  slug: row.slug ?? "",
   title: row.title ?? "",
   status: toStatus(row.status),
   content: parseContent(row.content),
@@ -70,10 +105,19 @@ const toPost = (row: typeof posts.$inferSelect): Post => ({
   updatedAt: toIsoString(row.updatedAt ?? new Date(0)),
 });
 
+const ensurePostSlug = async (db: Db, row: PostRow): Promise<Post> => {
+  if (row.slug) return toPost(row);
+  const id = row.id ?? "";
+  const slug = await getUniqueSlug(db, row.title, id);
+  await db.update(posts).set({ slug }).where(eq(posts.id, id));
+  return toPost({ ...row, slug });
+};
+
 export const createDraftPost = (): Post => {
   const now = new Date().toISOString();
   return {
     id: "new",
+    slug: "",
     title: "",
     status: "draft",
     content: defaultContent,
@@ -107,7 +151,9 @@ export const getAllPosts = () =>
     const rows = yield* Effect.tryPromise(() =>
       db.select().from(posts).orderBy(desc(posts.updatedAt)),
     );
-    return rows.map((row) => toPost(row));
+    return yield* Effect.tryPromise(() =>
+      Promise.all(rows.map((row) => ensurePostSlug(db, row))),
+    );
   }).pipe(Effect.mapError((cause) => new PostsLoadAllError({ cause })));
 
 export const getPostById = (id: string) =>
@@ -120,7 +166,7 @@ export const getPostById = (id: string) =>
     if (!post) {
       return yield* Effect.fail(recordNotFound(id));
     }
-    return toPost(post);
+    return yield* Effect.tryPromise(() => ensurePostSlug(db, post));
   }).pipe(
     Effect.mapError((cause) =>
       cause instanceof RecordNotFound ? cause : new PostsLoadError({ id, cause }),
@@ -133,10 +179,14 @@ export const createPost = (input: CreatePostInput) => {
   return Effect.gen(function* () {
     const db = yield* getDb();
     const now = new Date();
+    const slug = yield* Effect.tryPromise(() =>
+      getUniqueSlug(db, input.title),
+    );
     yield* Effect.tryPromise(() =>
       db.insert(posts).values([
         {
           id,
+          slug,
           title: input.title.trim(),
           status: input.status,
           content: input.content ?? defaultContent,
@@ -164,6 +214,9 @@ export const updatePost = (input: UpdatePostInput) =>
         await tx
           .update(posts)
           .set({
+            slug:
+              existing[0].slug ??
+              (await getUniqueSlug(tx, input.title, input.id)),
             title: input.title.trim(),
             status: input.status,
             content: input.content ?? defaultContent,
@@ -177,5 +230,22 @@ export const updatePost = (input: UpdatePostInput) =>
   }).pipe(
     Effect.mapError((cause) =>
       cause instanceof RecordNotFound ? cause : new PostsSaveError({ id: input.id, cause }),
+    ),
+  );
+
+export const getPostBySlug = (slug: string) =>
+  Effect.gen(function* () {
+    const db = yield* getDb();
+    const rows = yield* Effect.tryPromise(() =>
+      db.select().from(posts).where(eq(posts.slug, slug)).limit(1),
+    );
+    const post = rows[0];
+    if (!post) {
+      return yield* Effect.fail(recordNotFound(slug));
+    }
+    return toPost(post);
+  }).pipe(
+    Effect.mapError((cause) =>
+      cause instanceof RecordNotFound ? cause : new PostsLoadError({ id: slug, cause }),
     ),
   );

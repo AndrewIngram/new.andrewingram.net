@@ -176,6 +176,7 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [uploadCaption, setUploadCaption] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [isUploadingImage, setUploadingImage] = useState(false);
   const [captionMode, setCaptionMode] = useState<"use" | "override" | "none">(
     "use"
   );
@@ -441,19 +442,25 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
 
   const handleUpload = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!uploadFile) return;
+    if (!uploadFile || isUploadingImage) return;
     const formData = new FormData();
     formData.set("file", uploadFile);
     if (uploadCaption.trim()) {
       formData.set("caption", uploadCaption.trim());
     }
-    const image = await uploadImage(formData);
-    setLibraryImages((prev) => [image, ...prev]);
-    setSelectedImageId(image.id);
-    setCaptionMode(image.caption ? "use" : "none");
-    setCaptionOverride("");
-    setUploadCaption("");
-    setUploadFile(null);
+    setUploadingImage(true);
+    try {
+      const image = await uploadImage(formData);
+      setLibraryImages((prev) => [image, ...prev.filter((item) => item.id !== image.id)]);
+      setSelectedImageId(image.id);
+      setCaptionMode(image.caption ? "use" : "none");
+      setCaptionOverride("");
+      setUploadCaption("");
+      setUploadFile(null);
+      event.currentTarget.reset();
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const handleEmbedImage = () => {
@@ -504,6 +511,7 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
                     type="file"
                     accept="image/*"
                     required
+                    disabled={isUploadingImage}
                     onChange={(event) =>
                       setUploadFile(event.target.files?.[0] ?? null)
                     }
@@ -518,10 +526,11 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
                     value={uploadCaption}
                     onChange={(event) => setUploadCaption(event.target.value)}
                     placeholder="Photo by..."
+                    disabled={isUploadingImage}
                   />
                 </div>
-                <Button type="submit" disabled={!uploadFile}>
-                  Upload image
+                <Button type="submit" disabled={!uploadFile || isUploadingImage}>
+                  {isUploadingImage ? "Uploading..." : "Upload image"}
                 </Button>
               </form>
             </section>

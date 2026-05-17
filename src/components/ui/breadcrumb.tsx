@@ -1,8 +1,10 @@
 import * as React from "react"
-import { Slot } from "@radix-ui/react-slot"
+import { mergeProps } from "@base-ui/react/merge-props"
+import { useRender } from "@base-ui/react/use-render"
 import { ChevronRight, MoreHorizontal } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { renderFromAsChild } from "@/components/ui/render"
 
 function Breadcrumb({ ...props }: React.ComponentProps<"nav">) {
   return <nav aria-label="breadcrumb" data-slot="breadcrumb" {...props} />
@@ -34,19 +36,27 @@ function BreadcrumbItem({ className, ...props }: React.ComponentProps<"li">) {
 function BreadcrumbLink({
   asChild,
   className,
+  render,
+  children,
   ...props
 }: React.ComponentProps<"a"> & {
   asChild?: boolean
+  render?: useRender.ComponentProps<"a">["render"]
 }) {
-  const Comp = asChild ? Slot : "a"
+  const asChildRender = renderFromAsChild(asChild, children)
 
-  return (
-    <Comp
-      data-slot="breadcrumb-link"
-      className={cn("hover:text-foreground transition-colors", className)}
-      {...props}
-    />
-  )
+  return useRender({
+    defaultTagName: "a",
+    render: asChildRender ?? render,
+    props: mergeProps<"a">(
+      {
+        "data-slot": "breadcrumb-link",
+        className: cn("hover:text-foreground transition-colors", className),
+        children: asChild ? undefined : children,
+      } as React.ComponentProps<"a">,
+      props
+    ),
+  })
 }
 
 function BreadcrumbPage({ className, ...props }: React.ComponentProps<"span">) {

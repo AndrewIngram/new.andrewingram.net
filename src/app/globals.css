@@ -236,7 +236,12 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+    position: relative;
   }
+}
+
+.app-root {
+  isolation: isolate;
 }
 
 post-title {

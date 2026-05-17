@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { createServerFn, useServerFn } from "@tanstack/react-start";
-import type { FormEvent } from "react";
+import { type FormEvent, useState } from "react";
 
 import {
   Breadcrumb,
@@ -30,14 +30,24 @@ export const Route = createFileRoute("/cms/images")({
 
 function ImagesPage() {
   const router = useRouter();
-  const images = Route.useLoaderData();
+  const loaderImages = Route.useLoaderData();
+  const [images, setImages] = useState(loaderImages);
+  const [isUploading, setUploading] = useState(false);
   const uploadImage = useServerFn(uploadImageAction);
 
   async function onUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await uploadImage({ data: new FormData(event.currentTarget) });
-    event.currentTarget.reset();
-    await router.invalidate();
+    if (isUploading) return;
+    const form = event.currentTarget;
+    setUploading(true);
+    try {
+      const image = await uploadImage({ data: new FormData(form) });
+      setImages((prev) => [image, ...prev.filter((item) => item.id !== image.id)]);
+      form.reset();
+      await router.invalidate();
+    } finally {
+      setUploading(false);
+    }
   }
 
   return (
@@ -79,15 +89,28 @@ function ImagesPage() {
               <label className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 File
               </label>
-              <Input name="file" type="file" accept="image/*" required />
+              <Input
+                name="file"
+                type="file"
+                accept="image/*"
+                required
+                disabled={isUploading}
+              />
             </div>
             <div className="flex-1">
               <label className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 Caption (optional)
               </label>
-              <Input name="caption" type="text" placeholder="Photo by..." />
+              <Input
+                name="caption"
+                type="text"
+                placeholder="Photo by..."
+                disabled={isUploading}
+              />
             </div>
-            <Button type="submit">Upload</Button>
+            <Button type="submit" disabled={isUploading}>
+              {isUploading ? "Uploading..." : "Upload"}
+            </Button>
           </form>
         </section>
 
