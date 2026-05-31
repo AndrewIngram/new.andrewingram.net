@@ -9,8 +9,6 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './app/__root'
-import { Route as TestRouteImport } from './app/test'
-import { Route as DashboardRouteImport } from './app/dashboard'
 import { Route as CmsRouteImport } from './app/cms'
 import { Route as IndexRouteImport } from './app/index'
 import { Route as CmsIndexRouteImport } from './app/cms/index'
@@ -20,16 +18,6 @@ import { Route as CmsImagesRouteImport } from './app/cms/images'
 import { Route as CmsPostsIndexRouteImport } from './app/cms/posts/index'
 import { Route as CmsPostsIdRouteImport } from './app/cms/posts/$id'
 
-const TestRoute = TestRouteImport.update({
-  id: '/test',
-  path: '/test',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const CmsRoute = CmsRouteImport.update({
   id: '/cms',
   path: '/cms',
@@ -74,8 +62,6 @@ const CmsPostsIdRoute = CmsPostsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cms': typeof CmsRouteWithChildren
-  '/dashboard': typeof DashboardRoute
-  '/test': typeof TestRoute
   '/cms/images': typeof CmsImagesRoute
   '/images/$id': typeof ImagesIdRoute
   '/posts/$slug': typeof PostsSlugRoute
@@ -85,8 +71,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
-  '/test': typeof TestRoute
   '/cms/images': typeof CmsImagesRoute
   '/images/$id': typeof ImagesIdRoute
   '/posts/$slug': typeof PostsSlugRoute
@@ -98,8 +82,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/cms': typeof CmsRouteWithChildren
-  '/dashboard': typeof DashboardRoute
-  '/test': typeof TestRoute
   '/cms/images': typeof CmsImagesRoute
   '/images/$id': typeof ImagesIdRoute
   '/posts/$slug': typeof PostsSlugRoute
@@ -112,8 +94,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/cms'
-    | '/dashboard'
-    | '/test'
     | '/cms/images'
     | '/images/$id'
     | '/posts/$slug'
@@ -123,8 +103,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/dashboard'
-    | '/test'
     | '/cms/images'
     | '/images/$id'
     | '/posts/$slug'
@@ -135,8 +113,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/cms'
-    | '/dashboard'
-    | '/test'
     | '/cms/images'
     | '/images/$id'
     | '/posts/$slug'
@@ -148,28 +124,12 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CmsRoute: typeof CmsRouteWithChildren
-  DashboardRoute: typeof DashboardRoute
-  TestRoute: typeof TestRoute
   ImagesIdRoute: typeof ImagesIdRoute
   PostsSlugRoute: typeof PostsSlugRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/test': {
-      id: '/test'
-      path: '/test'
-      fullPath: '/test'
-      preLoaderRoute: typeof TestRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/cms': {
       id: '/cms'
       path: '/cms'
@@ -248,8 +208,6 @@ const CmsRouteWithChildren = CmsRoute._addFileChildren(CmsRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CmsRoute: CmsRouteWithChildren,
-  DashboardRoute: DashboardRoute,
-  TestRoute: TestRoute,
   ImagesIdRoute: ImagesIdRoute,
   PostsSlugRoute: PostsSlugRoute,
 }

@@ -7,44 +7,34 @@ const providers = Layer.mergeAll(Cloudflare.providers());
 
 const state = Cloudflare.state();
 
-export const db: Effect.Effect<Cloudflare.D1Database, never, any> = Effect.gen(
-  function* () {
-    const alchemy = yield* Alchemy.AlchemyContext;
-    const props = {
-      migrationsDir: "./migrations",
-      migrationsTable: "drizzle_migrations",
-      importFiles: ["./initial-data/posts.sql"],
-    };
-
-    return yield* Cloudflare.D1Database(
-      "database",
-      alchemy.dev ? props : { ...props, name: "andrewingram" },
-    );
-  },
-);
-
-export const imageBucket: Effect.Effect<Cloudflare.R2Bucket, never, any> =
-  Effect.gen(function* () {
-    const alchemy = yield* Alchemy.AlchemyContext;
-    return yield* Cloudflare.R2Bucket(
-      "images",
-      alchemy.dev ? {} : { name: "andrewingram-images" },
-    );
+const db = Effect.gen(function* () {
+  return yield* Cloudflare.D1Database("site-db", {
+    migrationsDir: "./migrations",
+    migrationsTable: "drizzle_migrations",
+    importFiles: ["./initial-data/posts.sql"],
   });
+});
+
+export const imageBucket = Effect.gen(function* () {
+  const alchemy = yield* Alchemy.AlchemyContext;
+  return yield* Cloudflare.R2Bucket(
+    "images",
+    alchemy.dev ? {} : { name: "andrewingram-images" },
+  );
+});
 
 export const Website = Cloudflare.Vite("website", {
   compatibility: {
     date: "2026-04-30",
     flags: ["nodejs_compat"],
   },
-  bindings: {
+  env: {
     DB: db,
     IMAGES: imageBucket,
   },
 });
 
 export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
-export type WorkerEnv = WebsiteEnv;
 
 export default Alchemy.Stack(
   "andrewingram",

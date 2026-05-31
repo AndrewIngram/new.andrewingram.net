@@ -25,6 +25,6 @@ export const uploadImageAction = createServerFn({ method: "POST" })
         size: file.size,
         data,
         ...(typeof caption === "string" ? { caption } : {}),
-      })
+      }),
     );
   });

@@ -1,26 +1,17 @@
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { createServerFn, useServerFn } from "@tanstack/react-start";
 import { type FormEvent, useState } from "react";
 
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { AppRuntime } from "@/lib/runtime";
 import { getAllImages } from "@/lib/images";
 
+import { CmsFloatingChrome } from "./-floating-chrome";
 import { uploadImageAction } from "./-image-actions";
 
 const getImages = createServerFn({ method: "GET" }).handler(() =>
-  AppRuntime.runPromise(getAllImages())
+  AppRuntime.runPromise(getAllImages()),
 );
 
 export const Route = createFileRoute("/cms/images")({
@@ -42,7 +33,10 @@ function ImagesPage() {
     setUploading(true);
     try {
       const image = await uploadImage({ data: new FormData(form) });
-      setImages((prev) => [image, ...prev.filter((item) => item.id !== image.id)]);
+      setImages((prev) => [
+        image,
+        ...prev.filter((item) => item.id !== image.id),
+      ]);
       form.reset();
       await router.invalidate();
     } finally {
@@ -52,30 +46,8 @@ function ImagesPage() {
 
   return (
     <>
-      <header className="flex min-h-16 flex-wrap items-center gap-3 border-b px-4 py-2">
-        <SidebarTrigger className="-ml-1" />
-        <Separator
-          orientation="vertical"
-          className="mr-1 data-[orientation=vertical]:h-4"
-        />
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem className="hidden md:block">
-              <BreadcrumbLink href="/cms">Content</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator className="hidden md:block" />
-            <BreadcrumbItem>
-              <BreadcrumbPage>Images</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-        <div className="ml-auto flex items-center gap-2">
-          <Button asChild variant="outline">
-            <Link to="/cms/posts">Posts</Link>
-          </Button>
-        </div>
-      </header>
-      <div className="flex flex-1 flex-col gap-6 p-6">
+      <CmsFloatingChrome collection="images" />
+      <div className="flex min-h-svh flex-col gap-6 px-6 pb-6 pt-24">
         <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900">Upload image</h2>
           <p className="mt-1 text-sm text-gray-500">

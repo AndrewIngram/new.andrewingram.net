@@ -1,8 +1,5 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 
-import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-
 import cmsCss from "./globals.css?url";
 
 export const Route = createFileRoute("/cms")({
@@ -13,12 +10,5 @@ export const Route = createFileRoute("/cms")({
 });
 
 function CmsLayout() {
-  return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        <Outlet />
-      </SidebarInset>
-    </SidebarProvider>
-  );
+  return <Outlet />;
 }

@@ -32,17 +32,7 @@ import {
 import type { Post, SavePostInput } from "@/lib/posts";
 import type { ImageAsset } from "@/lib/images";
 import { Button } from "@/components/ui/button";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   Sheet,
   SheetContent,
@@ -51,6 +41,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+
+import { CmsFloatingChrome } from "../-floating-chrome";
 
 type EditorProps = {
   post: Post;
@@ -129,7 +121,7 @@ const extractTitle = (content: JSONContent | null | undefined) => {
 
 const normalizeDocContent = (
   content: JSONContent,
-  title: string
+  title: string,
 ): JSONContent => {
   const nodes = content.type === "doc" ? (content.content ?? []) : [];
   const titleNode =
@@ -165,8 +157,8 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
     return normalizeDocContent(content, post.title);
   }, [post.content, post.title]);
 
-  const [title, setTitle] = useState(() =>
-    extractTitle(defaultLongContent) || post.title
+  const [title, setTitle] = useState(
+    () => extractTitle(defaultLongContent) || post.title,
   );
   const [status, setStatus] = useState(post.status);
   const [publishedAt, setPublishedAt] = useState(post.publishedAt ?? "");
@@ -178,7 +170,7 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploadingImage, setUploadingImage] = useState(false);
   const [captionMode, setCaptionMode] = useState<"use" | "override" | "none">(
-    "use"
+    "use",
   );
   const [captionOverride, setCaptionOverride] = useState("");
   const [slashState, setSlashState] = useState<{
@@ -204,7 +196,7 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
       setSlashState((prev) =>
         prev.open
           ? { open: false, query: "", range: null, position: null }
-          : prev
+          : prev,
       );
       return;
     }
@@ -214,7 +206,7 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
       setSlashState((prev) =>
         prev.open
           ? { open: false, query: "", range: null, position: null }
-          : prev
+          : prev,
       );
       return;
     }
@@ -225,7 +217,7 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
       setSlashState((prev) =>
         prev.open
           ? { open: false, query: "", range: null, position: null }
-          : prev
+          : prev,
       );
       return;
     }
@@ -234,7 +226,7 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
       setSlashState((prev) =>
         prev.open
           ? { open: false, query: "", range: null, position: null }
-          : prev
+          : prev,
       );
       return;
     }
@@ -244,7 +236,7 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
       setSlashState((prev) =>
         prev.open
           ? { open: false, query: "", range: null, position: null }
-          : prev
+          : prev,
       );
       return;
     }
@@ -303,7 +295,7 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
         if (event.key === "ArrowUp") {
           event.preventDefault();
           setSlashIndex(
-            (prev) => (prev - 1 + commands.length) % commands.length
+            (prev) => (prev - 1 + commands.length) % commands.length,
           );
           return true;
         }
@@ -366,14 +358,14 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
           editorInstance.chain().focus().toggleCodeBlock().run(),
       },
     ],
-    []
+    [],
   );
 
   const filteredCommands = useMemo(() => {
     const query = slashState.query.trim().toLowerCase();
     if (!query) return slashCommands;
     return slashCommands.filter((command) =>
-      `${command.title} ${command.description}`.toLowerCase().includes(query)
+      `${command.title} ${command.description}`.toLowerCase().includes(query),
     );
   }, [slashCommands, slashState.query]);
 
@@ -410,7 +402,7 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
 
   const selectedImage = useMemo(
     () => libraryImages.find((image) => image.id === selectedImageId) ?? null,
-    [libraryImages, selectedImageId]
+    [libraryImages, selectedImageId],
   );
 
   const handleSave = () => {
@@ -451,7 +443,10 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
     setUploadingImage(true);
     try {
       const image = await uploadImage(formData);
-      setLibraryImages((prev) => [image, ...prev.filter((item) => item.id !== image.id)]);
+      setLibraryImages((prev) => [
+        image,
+        ...prev.filter((item) => item.id !== image.id),
+      ]);
       setSelectedImageId(image.id);
       setCaptionMode(image.caption ? "use" : "none");
       setCaptionOverride("");
@@ -529,7 +524,10 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
                     disabled={isUploadingImage}
                   />
                 </div>
-                <Button type="submit" disabled={!uploadFile || isUploadingImage}>
+                <Button
+                  type="submit"
+                  disabled={!uploadFile || isUploadingImage}
+                >
                   {isUploadingImage ? "Uploading..." : "Upload image"}
                 </Button>
               </form>
@@ -603,7 +601,7 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
                       value={captionMode}
                       onChange={(event) =>
                         setCaptionMode(
-                          event.target.value as "use" | "override" | "none"
+                          event.target.value as "use" | "override" | "none",
                         )
                       }
                       className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-950"
@@ -650,84 +648,68 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
           </SheetFooter>
         </SheetContent>
       </Sheet>
-      <header className="flex min-h-16 flex-wrap items-center gap-3 border-b px-4 py-2 sticky top-0 z-10 bg-white">
-        <SidebarTrigger className="-ml-1" />
-        <Separator
-          orientation="vertical"
-          className="mr-1 data-[orientation=vertical]:h-4"
-        />
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem className="hidden md:block">
-              <BreadcrumbLink href="/cms">Content</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator className="hidden md:block" />
-            <BreadcrumbItem className="hidden md:block">
-              <BreadcrumbLink href="/cms/posts">Posts</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator className="hidden md:block" />
-            <BreadcrumbItem>
-              <BreadcrumbPage>{title || "Untitled post"}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-        <div className="ml-auto flex items-center gap-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setImageSheetOpen(true)}
-          >
-            <ImageIcon className="mr-2 size-4" />
-            Images
-          </Button>
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <label
-              className="text-xs font-medium uppercase tracking-wide"
-              htmlFor="status"
+      <CmsFloatingChrome
+        collection="posts"
+        currentPage={title || "Untitled post"}
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setImageSheetOpen(true)}
             >
-              Status
-            </label>
-            <select
-              id="status"
-              value={status}
-              onChange={(event) =>
-                setStatus(event.target.value as Post["status"])
-              }
-              className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-950"
-            >
-              <option value="draft">Draft</option>
-              <option value="published">Published</option>
-              <option value="archived">Archived</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <label
-              className="text-xs font-medium uppercase tracking-wide"
-              htmlFor="publishedAt"
-            >
-              Published
-            </label>
-            <input
-              id="publishedAt"
-              type="date"
-              value={formatDateForInput(publishedAt)}
-              onChange={(event) =>
-                setPublishedAt(parseDateFromInput(event.target.value))
-              }
-              className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-950"
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            {isSaving ? (
-              <span className="text-xs text-gray-500">Saving...</span>
-            ) : null}
-            <Button onClick={handleSave} disabled={!activeEditor || isSaving}>
-              Save
+              <ImageIcon className="mr-2 size-4" />
+              Images
             </Button>
-          </div>
-        </div>
-      </header>
-      <div className="flex flex-1 bg-white">
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <label
+                className="text-xs font-medium uppercase tracking-wide"
+                htmlFor="status"
+              >
+                Status
+              </label>
+              <select
+                id="status"
+                value={status}
+                onChange={(event) =>
+                  setStatus(event.target.value as Post["status"])
+                }
+                className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-950"
+              >
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <label
+                className="text-xs font-medium uppercase tracking-wide"
+                htmlFor="publishedAt"
+              >
+                Published
+              </label>
+              <input
+                id="publishedAt"
+                type="date"
+                value={formatDateForInput(publishedAt)}
+                onChange={(event) =>
+                  setPublishedAt(parseDateFromInput(event.target.value))
+                }
+                className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-950"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              {isSaving ? (
+                <span className="text-xs text-gray-500">Saving...</span>
+              ) : null}
+              <Button onClick={handleSave} disabled={!activeEditor || isSaving}>
+                Save
+              </Button>
+            </div>
+          </>
+        }
+      />
+      <div className="flex min-h-svh bg-white pt-48 xl:pt-20">
         {activeEditor ? (
           <BubbleMenu
             editor={activeEditor}
@@ -757,7 +739,9 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
                 data-active={activeEditor.isActive("italic")}
                 aria-pressed={activeEditor.isActive("italic")}
                 aria-label="Toggle italic"
-                onClick={() => activeEditor.chain().focus().toggleItalic().run()}
+                onClick={() =>
+                  activeEditor.chain().focus().toggleItalic().run()
+                }
               >
                 <Italic className="size-4" />
               </Button>
@@ -769,7 +753,9 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
                 data-active={activeEditor.isActive("strike")}
                 aria-pressed={activeEditor.isActive("strike")}
                 aria-label="Toggle strikethrough"
-                onClick={() => activeEditor.chain().focus().toggleStrike().run()}
+                onClick={() =>
+                  activeEditor.chain().focus().toggleStrike().run()
+                }
               >
                 <Strikethrough className="size-4" />
               </Button>
@@ -809,7 +795,9 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
                 data-active={activeEditor.isActive("bulletList")}
                 aria-pressed={activeEditor.isActive("bulletList")}
                 aria-label="Toggle bulleted list"
-                onClick={() => activeEditor.chain().focus().toggleBulletList().run()}
+                onClick={() =>
+                  activeEditor.chain().focus().toggleBulletList().run()
+                }
               >
                 <List className="size-4" />
               </Button>
@@ -821,7 +809,9 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
                 data-active={activeEditor.isActive("orderedList")}
                 aria-pressed={activeEditor.isActive("orderedList")}
                 aria-label="Toggle numbered list"
-                onClick={() => activeEditor.chain().focus().toggleOrderedList().run()}
+                onClick={() =>
+                  activeEditor.chain().focus().toggleOrderedList().run()
+                }
               >
                 <ListOrdered className="size-4" />
               </Button>
@@ -833,7 +823,9 @@ const Tiptap = ({ post, savePost, uploadImage, images }: EditorProps) => {
                 data-active={activeEditor.isActive("blockquote")}
                 aria-pressed={activeEditor.isActive("blockquote")}
                 aria-label="Toggle blockquote"
-                onClick={() => activeEditor.chain().focus().toggleBlockquote().run()}
+                onClick={() =>
+                  activeEditor.chain().focus().toggleBlockquote().run()
+                }
               >
                 <Quote className="size-4" />
               </Button>
