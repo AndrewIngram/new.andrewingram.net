@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
-import { AppRuntime } from "@/lib/runtime";
 import { saveImageUpload } from "@/lib/images";
+import { runMutation } from "@/lib/runtime";
 
 export const uploadImageAction = createServerFn({ method: "POST" })
   .inputValidator((formData: FormData) => formData)
@@ -18,7 +18,7 @@ export const uploadImageAction = createServerFn({ method: "POST" })
     }
 
     const data = new Uint8Array(await file.arrayBuffer());
-    return AppRuntime.runPromise(
+    return runMutation(
       saveImageUpload({
         originalName: file.name,
         mimeType: file.type || "application/octet-stream",
@@ -26,5 +26,10 @@ export const uploadImageAction = createServerFn({ method: "POST" })
         data,
         ...(typeof caption === "string" ? { caption } : {}),
       }),
+      {
+        name: "image.upload",
+        errorMessage: "Unable to upload image.",
+        context: { mimeType: file.type, size: file.size },
+      },
     );
   });

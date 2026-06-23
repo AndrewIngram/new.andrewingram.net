@@ -25,10 +25,8 @@ function PostsIndex() {
       <CmsFloatingChrome
         collection="posts"
         actions={
-          <Button asChild>
-            <Link to="/cms/posts/$id" params={{ id: "new" }}>
-              New post
-            </Link>
+          <Button render={<Link to="/cms/posts/$id" params={{ id: "new" }} />}>
+            New post
           </Button>
         }
       />

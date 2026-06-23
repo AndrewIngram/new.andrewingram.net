@@ -41,23 +41,27 @@ export function CmsFloatingChrome({
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link
-                  to={collection === "posts" ? "/cms/posts" : "/cms/images"}
-                >
-                  {collectionLabels[collection]}
-                </Link>
+              <BreadcrumbLink
+                render={
+                  <Link
+                    to={collection === "posts" ? "/cms/posts" : "/cms/images"}
+                  />
+                }
+              >
+                {collectionLabels[collection]}
               </BreadcrumbLink>
               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Switch content collection"
-                    className="hover:text-foreground inline-flex items-center transition-colors"
-                  >
-                    <ChevronDownIcon className="size-3.5" />
-                  </button>
-                </DropdownMenuTrigger>
+                <DropdownMenuTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label="Switch content collection"
+                      className="hover:text-foreground inline-flex items-center transition-colors"
+                    >
+                      <ChevronDownIcon className="size-3.5" />
+                    </button>
+                  }
+                />
                 <DropdownMenuContent align="start">
                   <DropdownMenuItem render={<Link to="/cms/posts" />}>
                     Posts

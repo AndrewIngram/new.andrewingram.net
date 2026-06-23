@@ -1,15 +1,22 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import { createPost, updatePost, type SavePostInput } from "@/lib/posts";
-import { AppRuntime } from "@/lib/runtime";
+import { runMutation } from "@/lib/runtime";
 
 export const savePostAction = createServerFn({ method: "POST" })
   .inputValidator((input: SavePostInput) => input)
   .handler(({ data: input }) => {
     if (input.id === "new") {
       const { id: _, ...rest } = input;
-      return AppRuntime.runPromise(createPost(rest));
+      return runMutation(createPost(rest), {
+        name: "post.create",
+        errorMessage: "Unable to create post.",
+      });
     }
 
-    return AppRuntime.runPromise(updatePost(input));
+    return runMutation(updatePost(input), {
+      name: "post.update",
+      errorMessage: "Unable to save post.",
+      context: { postId: input.id },
+    });
   });

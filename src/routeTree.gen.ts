@@ -15,6 +15,7 @@ import { Route as CmsIndexRouteImport } from './app/cms/index'
 import { Route as PostsSlugRouteImport } from './app/posts/$slug'
 import { Route as ImagesIdRouteImport } from './app/images/$id'
 import { Route as CmsImagesRouteImport } from './app/cms/images'
+import { Route as CmsImageBackfillRouteImport } from './app/cms/image-backfill'
 import { Route as CmsPostsIndexRouteImport } from './app/cms/posts/index'
 import { Route as CmsPostsIdRouteImport } from './app/cms/posts/$id'
 
@@ -48,6 +49,11 @@ const CmsImagesRoute = CmsImagesRouteImport.update({
   path: '/images',
   getParentRoute: () => CmsRoute,
 } as any)
+const CmsImageBackfillRoute = CmsImageBackfillRouteImport.update({
+  id: '/image-backfill',
+  path: '/image-backfill',
+  getParentRoute: () => CmsRoute,
+} as any)
 const CmsPostsIndexRoute = CmsPostsIndexRouteImport.update({
   id: '/posts/',
   path: '/posts/',
@@ -62,6 +68,7 @@ const CmsPostsIdRoute = CmsPostsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cms': typeof CmsRouteWithChildren
+  '/cms/image-backfill': typeof CmsImageBackfillRoute
   '/cms/images': typeof CmsImagesRoute
   '/images/$id': typeof ImagesIdRoute
   '/posts/$slug': typeof PostsSlugRoute
@@ -71,6 +78,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/cms/image-backfill': typeof CmsImageBackfillRoute
   '/cms/images': typeof CmsImagesRoute
   '/images/$id': typeof ImagesIdRoute
   '/posts/$slug': typeof PostsSlugRoute
@@ -82,6 +90,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/cms': typeof CmsRouteWithChildren
+  '/cms/image-backfill': typeof CmsImageBackfillRoute
   '/cms/images': typeof CmsImagesRoute
   '/images/$id': typeof ImagesIdRoute
   '/posts/$slug': typeof PostsSlugRoute
@@ -94,6 +103,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/cms'
+    | '/cms/image-backfill'
     | '/cms/images'
     | '/images/$id'
     | '/posts/$slug'
@@ -103,6 +113,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/cms/image-backfill'
     | '/cms/images'
     | '/images/$id'
     | '/posts/$slug'
@@ -113,6 +124,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/cms'
+    | '/cms/image-backfill'
     | '/cms/images'
     | '/images/$id'
     | '/posts/$slug'
@@ -172,6 +184,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CmsImagesRouteImport
       parentRoute: typeof CmsRoute
     }
+    '/cms/image-backfill': {
+      id: '/cms/image-backfill'
+      path: '/image-backfill'
+      fullPath: '/cms/image-backfill'
+      preLoaderRoute: typeof CmsImageBackfillRouteImport
+      parentRoute: typeof CmsRoute
+    }
     '/cms/posts/': {
       id: '/cms/posts/'
       path: '/posts'
@@ -190,6 +209,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface CmsRouteChildren {
+  CmsImageBackfillRoute: typeof CmsImageBackfillRoute
   CmsImagesRoute: typeof CmsImagesRoute
   CmsIndexRoute: typeof CmsIndexRoute
   CmsPostsIdRoute: typeof CmsPostsIdRoute
@@ -197,6 +217,7 @@ interface CmsRouteChildren {
 }
 
 const CmsRouteChildren: CmsRouteChildren = {
+  CmsImageBackfillRoute: CmsImageBackfillRoute,
   CmsImagesRoute: CmsImagesRoute,
   CmsIndexRoute: CmsIndexRoute,
   CmsPostsIdRoute: CmsPostsIdRoute,

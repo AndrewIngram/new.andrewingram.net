@@ -3,6 +3,7 @@ import * as Schema from "effect/Schema";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { env } from "@/env";
+import type { ImageFormat, ImageWidth } from "./image-delivery";
 
 const ImageSchema = Schema.Struct({
   id: Schema.String,
@@ -10,6 +11,8 @@ const ImageSchema = Schema.Struct({
   originalName: Schema.String,
   mimeType: Schema.String,
   size: Schema.Number,
+  width: Schema.optional(Schema.Number),
+  height: Schema.optional(Schema.Number),
   caption: Schema.optional(Schema.String),
   createdAt: Schema.String,
   updatedAt: Schema.String,
@@ -54,6 +57,10 @@ export class ImagesDeleteError extends Data.TaggedError("ImagesDeleteError")<{
   cause: unknown;
 }> {}
 
+export class ImagesBackfillError extends Data.TaggedError("ImagesBackfillError")<{
+  cause: unknown;
+}> {}
+
 const metadataKey = (id: string) => `metadata/${id}.json`;
 const fileKey = (fileName: string) => `files/${fileName}`;
 
@@ -63,10 +70,7 @@ const parseJson = (input: string): Effect.Effect<unknown, ImagesParseError> =>
     catch: (cause) => new ImagesParseError({ cause }),
   });
 
-const decodeImage = (
-  raw: unknown,
-  label: string,
-): Effect.Effect<ImageAsset, ImagesDecodeError> =>
+const decodeImage = (raw: unknown, label: string): Effect.Effect<ImageAsset, ImagesDecodeError> =>
   Schema.decodeUnknownEffect(ImageSchema)(raw).pipe(
     Effect.mapError((cause) => new ImagesDecodeError({ label, cause })),
   );
@@ -110,9 +114,7 @@ export const getAllImages = () =>
     );
 
     return images.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }).pipe(
-    Effect.mapError((cause) => new ImagesLoadAllError({ cause })),
-  );
+  }).pipe(Effect.mapError((cause) => new ImagesLoadAllError({ cause })));
 
 export const getImageById = (id: string) =>
   readImageMetadata(id).pipe(
@@ -135,12 +137,26 @@ export const getImageObjectById = (id: string) =>
     ),
   );
 
+export const transformImageObject = (
+  object: R2ObjectBody,
+  width: ImageWidth,
+  format: ImageFormat,
+) =>
+  Effect.tryPromise(() =>
+    env.IMAGE_TRANSFORMER.input(object.body)
+      .transform({ width, fit: "scale-down" })
+      .output({ format })
+      .then((result) => result.response()),
+  );
+
 export type SaveImageInput = {
   id: string;
   fileName?: string;
   originalName?: string;
   mimeType?: string;
   size?: number;
+  width?: number;
+  height?: number;
   caption?: string;
 };
 
@@ -162,6 +178,8 @@ export const saveImage = (input: SaveImageInput) => {
     const originalName = input.originalName ?? existing?.originalName;
     const mimeType = input.mimeType ?? existing?.mimeType;
     const size = input.size ?? existing?.size;
+    const width = input.width ?? existing?.width;
+    const height = input.height ?? existing?.height;
 
     if (fileName == null || originalName == null || mimeType == null || size == null) {
       const missing = [
@@ -180,6 +198,8 @@ export const saveImage = (input: SaveImageInput) => {
       originalName,
       mimeType,
       size,
+      ...(width == null ? {} : { width }),
+      ...(height == null ? {} : { height }),
       caption: input.caption?.trim() || existing?.caption,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
@@ -214,6 +234,10 @@ export const saveImageUpload = (input: ImageUploadInput) =>
     const ext = path.extname(safeName);
     const fileName = `${id}${ext}`;
 
+    const dimensions = yield* Effect.tryPromise(() =>
+      env.IMAGE_TRANSFORMER.info(new Blob([input.data.slice().buffer as ArrayBuffer]).stream()),
+    );
+
     yield* Effect.tryPromise(() =>
       env.IMAGES.put(fileKey(fileName), input.data, {
         httpMetadata: { contentType: input.mimeType },
@@ -226,6 +250,7 @@ export const saveImageUpload = (input: ImageUploadInput) =>
       originalName: safeName,
       mimeType: input.mimeType,
       size: input.size,
+      ...("width" in dimensions ? { width: dimensions.width, height: dimensions.height } : {}),
       caption: input.caption?.trim() || undefined,
       createdAt: now,
       updatedAt: now,
@@ -238,9 +263,7 @@ export const saveImageUpload = (input: ImageUploadInput) =>
     );
 
     return image;
-  }).pipe(
-    Effect.mapError((cause) => new ImagesUploadError({ cause })),
-  );
+  }).pipe(Effect.mapError((cause) => new ImagesUploadError({ cause })));
 
 export const deleteImage = (id: string) =>
   Effect.gen(function* () {
@@ -249,3 +272,36 @@ export const deleteImage = (id: string) =>
       env.IMAGES.delete([fileKey(existing.fileName), metadataKey(id)]),
     );
   }).pipe(Effect.catch((cause) => Effect.fail(new ImagesDeleteError({ id, cause }))));
+
+export const backfillImageDimensions = () =>
+  Effect.gen(function* () {
+    const images = yield* getAllImages();
+    let updated = 0;
+    let skipped = 0;
+
+    const resolved = yield* Effect.forEach(
+      images,
+      (image) =>
+        Effect.gen(function* () {
+          if (image.width != null && image.height != null) return image;
+
+          const { object } = yield* getImageObjectById(image.id);
+          const info = yield* Effect.tryPromise(() => env.IMAGE_TRANSFORMER.info(object.body));
+          if (!("width" in info)) {
+            skipped += 1;
+            return image;
+          }
+
+          const saved = yield* saveImage({
+            id: image.id,
+            width: info.width,
+            height: info.height,
+          });
+          updated += 1;
+          return saved;
+        }),
+      { concurrency: 4 },
+    );
+
+    return { images: resolved, updated, skipped };
+  }).pipe(Effect.mapError((cause) => new ImagesBackfillError({ cause })));

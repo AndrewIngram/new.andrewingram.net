@@ -27,7 +27,10 @@ const getPostEditorData = createServerFn({ method: "GET" })
   });
 
 export const Route = createFileRoute("/cms/posts/$id")({
-  loader: ({ params }) => getPostEditorData({ data: params.id }),
+  loader: ({ params }) => {
+    console.log("Loading post editor data for id:", params.id);
+    return getPostEditorData({ data: params.id });
+  },
   component: PostEditorPage,
 });
 

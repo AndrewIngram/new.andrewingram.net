@@ -1,10 +1,8 @@
 :root {
   --layout-width: 65rem;
-}
-
-::selection {
-  color: #222;
-  background: #f8dd4f;
+  --family-serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  --family-sans:
+    "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 * {
@@ -17,17 +15,12 @@ html,
 body {
   max-width: 100vw;
   overflow-x: hidden;
-  font-family:
-    "Inter",
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
+  font-family: var(--family-sans);
   line-height: 1.6;
   color: oklch(0.1666 0.0765 4.76);
-  background-color: oklch(0.7867 0.0765 4.76);
+  background-color: #f1efe8;
+  text-rendering: optimizePrecision;
+  -webkit-font-smoothing: antialiased;
 }
 
 .app-root {
@@ -96,13 +89,13 @@ article.post {
 }
 
 article.post-detail {
-  max-width: 44rem;
+  max-width: 40rem;
 
   header {
     margin-bottom: 2rem;
 
     h1 {
-      font-size: clamp(1rem, 6vw, 2rem);
+      font-size: 1.4rem;
       line-height: 1.05;
       font-weight: 650;
     }
@@ -121,7 +114,17 @@ article.post-detail {
 .post-content {
   display: grid;
   gap: 1rem;
-  font-size: 1.05rem;
+  font-size: 0.9rem;
+
+  a:link,
+  a:visited {
+    color: oklch(0.1666 0.0765 4.76);
+    text-decoration: underline;
+  }
+
+  p {
+    font-family: var(--family-serif);
+  }
 
   h2,
   h3,
@@ -130,10 +133,12 @@ article.post-detail {
   h6 {
     margin-top: 1.5rem;
     line-height: 1.2;
+    /* max-inline-size: 50ch; */
+    font-weight: 400;
   }
 
   h2 {
-    font-size: 1.6rem;
+    font-size: 1.2rem;
   }
 
   h3 {
@@ -153,23 +158,26 @@ article.post-detail {
 
   code {
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
-    font-size: 0.9em;
-    background-color: white;
+    font-size: 0.8em;
+    padding-block: 0.1rem;
+    padding-inline: 0.25rem;
+    background-color: rgb(255, 255, 255, 0.6);
   }
 
-  pre {
+  pre:has(code) {
     overflow-x: auto;
     padding: 1rem;
-    border: 1px solid currentColor;
+    background-color: white;
 
     code {
       background-color: transparent;
+      padding: 0;
     }
   }
 
   figure {
     display: grid;
-    gap: 0.5rem;
+    gap: 0.25rem;
     margin-block: 1rem;
   }
 
@@ -179,7 +187,7 @@ article.post-detail {
   }
 
   figcaption {
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     opacity: 0.75;
   }
 }

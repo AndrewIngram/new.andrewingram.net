@@ -42,13 +42,7 @@ function Home() {
             <header>
               <h1>
                 <Link to="/posts/$slug" params={{ slug: post.slug }}>
-                  {post.status === "draft" ? (
-                    <>
-                      <span className="chip">Draft</span> {post.title}
-                    </>
-                  ) : (
-                    post.title
-                  )}
+                  Feb - {post.title}
                 </Link>
               </h1>
             </header>

@@ -17,4 +17,12 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
   },
+  ssr: {
+    external: ["cloudflare:workers"],
+  },
+  build: {
+    rolldownOptions: {
+      external: ["cloudflare:workers"],
+    },
+  },
 });

@@ -1,12 +1,12 @@
 import { Data, Effect } from "effect";
 import * as Schema from "effect/Schema";
-import type { JSONContent } from "@tiptap/core";
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, ne } from "drizzle-orm";
 import slugify from "slugify";
 import { getDbAsync } from "@/db";
 import { posts } from "@/db/schema";
 import { RecordNotFound } from "./errors";
+import type { JSONContent } from "./post-content-json";
 
 const PostStatusSchema = Schema.Literals(["draft", "published", "archived"]);
 const PostSchema = Schema.Struct({
@@ -40,6 +40,10 @@ export class PostsSaveError extends Data.TaggedError("PostsSaveError")<{
   cause: unknown;
 }> {}
 
+export class PostsBackfillError extends Data.TaggedError("PostsBackfillError")<{
+  cause: unknown;
+}> {}
+
 const defaultContent: JSONContent = {
   type: "doc",
   content: [{ type: "paragraph" }],
@@ -70,11 +74,7 @@ type PostRow = typeof posts.$inferSelect;
 const getBaseSlug = (title: string) =>
   slugify(title, { lower: true, strict: true, trim: true }) || "post";
 
-const getUniqueSlug = async (
-  db: Db | Tx,
-  title: string,
-  excludeId?: string | null,
-) => {
+const getUniqueSlug = async (db: Db | Tx, title: string, excludeId?: string | null) => {
   const baseSlug = getBaseSlug(title);
   let suffix = 1;
 
@@ -83,11 +83,7 @@ const getUniqueSlug = async (
     const rows = await db
       .select({ id: posts.id })
       .from(posts)
-      .where(
-        excludeId
-          ? and(eq(posts.slug, slug), ne(posts.id, excludeId))
-          : eq(posts.slug, slug),
-      )
+      .where(excludeId ? and(eq(posts.slug, slug), ne(posts.id, excludeId)) : eq(posts.slug, slug))
       .limit(1);
 
     if (rows.length === 0) return slug;
@@ -151,9 +147,7 @@ export const getAllPosts = () =>
     const rows = yield* Effect.tryPromise(() =>
       db.select().from(posts).orderBy(desc(posts.updatedAt)),
     );
-    return yield* Effect.tryPromise(() =>
-      Promise.all(rows.map((row) => ensurePostSlug(db, row))),
-    );
+    return yield* Effect.tryPromise(() => Promise.all(rows.map((row) => ensurePostSlug(db, row))));
   }).pipe(Effect.mapError((cause) => new PostsLoadAllError({ cause })));
 
 export const getPostById = (id: string) =>
@@ -179,9 +173,7 @@ export const createPost = (input: CreatePostInput) => {
   return Effect.gen(function* () {
     const db = yield* getDb();
     const now = new Date();
-    const slug = yield* Effect.tryPromise(() =>
-      getUniqueSlug(db, input.title),
-    );
+    const slug = yield* Effect.tryPromise(() => getUniqueSlug(db, input.title));
     yield* Effect.tryPromise(() =>
       db.insert(posts).values([
         {
@@ -203,30 +195,28 @@ export const updatePost = (input: UpdatePostInput) =>
   Effect.gen(function* () {
     const db = yield* getDb();
     const now = new Date();
-    return yield* Effect.tryPromise(() =>
-      db.transaction(async (tx) => {
-        const existing = await tx.select().from(posts).where(eq(posts.id, input.id)).limit(1);
+    return yield* Effect.tryPromise(async () => {
+      const existing = await db.select().from(posts).where(eq(posts.id, input.id)).limit(1);
 
-        if (!existing[0]) {
-          throw recordNotFound(input.id);
-        }
+      if (!existing[0]) {
+        throw recordNotFound(input.id);
+      }
 
-        await tx
-          .update(posts)
-          .set({
-            slug:
-              existing[0].slug ??
-              (await getUniqueSlug(tx, input.title, input.id)),
-            title: input.title.trim(),
-            status: input.status,
-            content: input.content ?? defaultContent,
-            updatedAt: now,
-          })
-          .where(eq(posts.id, input.id));
+      const slug = existing[0].slug ?? (await getUniqueSlug(db, input.title, input.id));
 
-        return { id: input.id };
-      }),
-    );
+      await db
+        .update(posts)
+        .set({
+          slug,
+          title: input.title.trim(),
+          status: input.status,
+          content: input.content ?? defaultContent,
+          updatedAt: now,
+        })
+        .where(eq(posts.id, input.id));
+
+      return { id: input.id };
+    });
   }).pipe(
     Effect.mapError((cause) =>
       cause instanceof RecordNotFound ? cause : new PostsSaveError({ id: input.id, cause }),
@@ -249,3 +239,59 @@ export const getPostBySlug = (slug: string) =>
       cause instanceof RecordNotFound ? cause : new PostsLoadError({ id: slug, cause }),
     ),
   );
+
+type ImageDimensions = ReadonlyMap<string, { width: number; height: number }>;
+
+export const addPostImageDimensions = (
+  node: JSONContent,
+  dimensions: ImageDimensions,
+): { content: JSONContent; changed: boolean } => {
+  let changed = false;
+  const content = node.content?.map((child) => {
+    const result = addPostImageDimensions(child, dimensions);
+    changed ||= result.changed;
+    return result.content;
+  });
+
+  if (node.type !== "image") {
+    return { content: content ? { ...node, content } : node, changed };
+  }
+
+  const src = typeof node.attrs?.src === "string" ? node.attrs.src : "";
+  const match = /^\/images\/([^/?#]+)$/.exec(src);
+  const size = match ? dimensions.get(match[1]) : undefined;
+  if (!size || (node.attrs?.width === size.width && node.attrs?.height === size.height)) {
+    return { content: content ? { ...node, content } : node, changed };
+  }
+
+  return {
+    content: {
+      ...node,
+      attrs: { ...node.attrs, width: size.width, height: size.height },
+      ...(content ? { content } : {}),
+    },
+    changed: true,
+  };
+};
+
+export const backfillPostImageDimensions = (dimensions: ImageDimensions) =>
+  Effect.gen(function* () {
+    const db = yield* getDb();
+    const rows = yield* Effect.tryPromise(() => db.select().from(posts));
+    let updated = 0;
+
+    yield* Effect.forEach(
+      rows,
+      (row) => {
+        const result = addPostImageDimensions(parseContent(row.content), dimensions);
+        if (!result.changed || !row.id) return Effect.void;
+        updated += 1;
+        return Effect.tryPromise(() =>
+          db.update(posts).set({ content: result.content }).where(eq(posts.id, row.id!)),
+        );
+      },
+      { concurrency: 1 },
+    );
+
+    return { updated };
+  }).pipe(Effect.mapError((cause) => new PostsBackfillError({ cause })));

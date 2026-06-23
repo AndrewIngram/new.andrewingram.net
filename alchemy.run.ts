@@ -23,6 +23,8 @@ export const imageBucket = Effect.gen(function* () {
   );
 });
 
+export const imageTransformer = Cloudflare.Images({ name: "IMAGE_TRANSFORMER" });
+
 export const Website = Cloudflare.Vite("website", {
   compatibility: {
     date: "2026-04-30",
@@ -31,6 +33,7 @@ export const Website = Cloudflare.Vite("website", {
   env: {
     DB: db,
     IMAGES: imageBucket,
+    IMAGE_TRANSFORMER: imageTransformer,
   },
 });
 

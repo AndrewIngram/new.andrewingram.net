@@ -50,6 +50,12 @@ Deploy to Cloudflare Workers:
 npm run deploy
 ```
 
+After deploying responsive image support, backfill dimensions for existing images and posts:
+
+```bash
+bun run images:backfill https://andrewingram.net
+```
+
 ## Preview
 
 Preview the production build locally:

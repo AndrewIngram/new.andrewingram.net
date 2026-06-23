@@ -1,5 +1,6 @@
 import { Fragment, type ElementType, type ReactNode } from "react";
-import type { JSONContent } from "@tiptap/core";
+import type { JSONContent } from "@/lib/post-content-json";
+import { imageRenditionUrl, imageSrcSet, POST_IMAGE_SIZES } from "@/lib/image-delivery";
 
 type RenderOptions = {
   skipTitle?: boolean;
@@ -8,8 +9,7 @@ type RenderOptions = {
 const getChildren = (node: JSONContent, options: RenderOptions): ReactNode =>
   node.content?.map((child, index) => renderNode(child, index, options)) ?? null;
 
-const getAttrs = (node: JSONContent) =>
-  (node.attrs ?? {}) as Record<string, unknown>;
+const getAttrs = (node: JSONContent) => (node.attrs ?? {}) as Record<string, unknown>;
 
 const getText = (node: JSONContent) => {
   let text = "";
@@ -44,11 +44,7 @@ const applyMarks = (node: JSONContent, content: ReactNode) =>
     }
   }, content);
 
-const renderNode = (
-  node: JSONContent,
-  key: number,
-  options: RenderOptions,
-): ReactNode => {
+const renderNode = (node: JSONContent, key: number, options: RenderOptions): ReactNode => {
   const attrs = getAttrs(node);
 
   switch (node.type) {
@@ -83,19 +79,27 @@ const renderNode = (
       return <br key={key} />;
     case "horizontalRule":
       return <hr key={key} />;
-    case "imageBlock": {
-      const caption = String(attrs.caption ?? "");
+    case "figure":
+      return <figure key={key}>{getChildren(node, options)}</figure>;
+    case "image": {
+      const src = String(attrs.src ?? "");
+      const width = Number(attrs.width);
+      const height = Number(attrs.height);
       return (
-        <figure key={key} data-type="image-block">
-          <img
-            src={String(attrs.src ?? "")}
-            alt={String(attrs.alt ?? "")}
-            loading="lazy"
-          />
-          {caption ? <figcaption>{caption}</figcaption> : null}
-        </figure>
+        <img
+          key={key}
+          src={imageRenditionUrl(src, 640)}
+          srcSet={imageSrcSet(src)}
+          sizes={POST_IMAGE_SIZES}
+          alt={String(attrs.alt ?? "")}
+          {...(Number.isFinite(width) && width > 0 ? { width } : {})}
+          {...(Number.isFinite(height) && height > 0 ? { height } : {})}
+          loading="lazy"
+        />
       );
     }
+    case "figcaption":
+      return <figcaption key={key}>{getChildren(node, options)}</figcaption>;
     default:
       return <Fragment key={key}>{getChildren(node, options)}</Fragment>;
   }
