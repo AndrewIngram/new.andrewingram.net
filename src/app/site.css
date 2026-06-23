@@ -175,6 +175,71 @@ article.post-detail {
     }
   }
 
+  .post-code-block-frame {
+    margin-block: 1rem;
+    overflow: hidden;
+    border: 1px solid rgb(17, 24, 39, 0.12);
+    background: white;
+  }
+
+  .post-code-block {
+    position: relative;
+    margin: 0;
+    overflow-x: auto;
+    padding: 0.9rem 0;
+    background: white !important;
+
+    &::before {
+      content: attr(data-language);
+      position: sticky;
+      left: 0;
+      display: block;
+      width: max-content;
+      padding: 0 1rem 0.4rem;
+      color: rgb(75, 85, 99);
+      font-family: Inter, system-ui, sans-serif;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    code {
+      display: grid;
+      min-width: max-content;
+      background: transparent;
+      padding: 0;
+      counter-reset: code-line;
+    }
+
+    .line {
+      display: block;
+      min-height: 1.6em;
+      padding-right: 1rem;
+      padding-left: 4.75rem;
+      counter-increment: code-line;
+
+      &::before {
+        content: counter(code-line);
+        display: inline-block;
+        width: 2.5rem;
+        margin-left: -4rem;
+        padding-right: 1rem;
+        color: rgb(107, 114, 128);
+        text-align: right;
+        user-select: none;
+      }
+    }
+
+    .line.is-highlighted {
+      background: rgb(254, 243, 199);
+
+      &::before {
+        color: rgb(146, 64, 14);
+      }
+    }
+  }
+
   figure {
     display: grid;
     gap: 0.25rem;

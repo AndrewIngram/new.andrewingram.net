@@ -1,4 +1,9 @@
 import { Schema, type Node as ProseMirrorNode } from "prosemirror-model";
+import {
+  DEFAULT_CODE_LANGUAGE,
+  migrateCodeBlockLanguageHints,
+  normalizeHighlightRanges,
+} from "@/lib/code-blocks";
 import type { JSONContent } from "@/lib/post-content-json";
 
 export const postSchema = new Schema({
@@ -69,11 +74,39 @@ export const postSchema = new Schema({
     codeBlock: {
       group: "block",
       content: "text*",
+      attrs: {
+        language: { default: DEFAULT_CODE_LANGUAGE },
+        highlightRanges: { default: [] },
+      },
       marks: "",
       code: true,
       defining: true,
-      toDOM: () => ["pre", ["code", 0]],
-      parseDOM: [{ tag: "pre", preserveWhitespace: "full" }],
+      isolating: true,
+      selectable: true,
+      toDOM: (node) => [
+        "pre",
+        {
+          "data-language": node.attrs.language,
+          "data-highlight-ranges": JSON.stringify(node.attrs.highlightRanges ?? []),
+        },
+        ["code", 0],
+      ],
+      parseDOM: [
+        {
+          tag: "pre",
+          preserveWhitespace: "full",
+          getAttrs: (node) =>
+            node instanceof HTMLElement
+              ? {
+                  language: node.dataset.language || DEFAULT_CODE_LANGUAGE,
+                  highlightRanges: normalizeHighlightRanges(
+                    parseHighlightRangesAttr(node.dataset.highlightRanges),
+                    node.textContent?.split("\n").length ?? 1,
+                  ),
+                }
+              : false,
+        },
+      ],
     },
     horizontalRule: {
       group: "block",
@@ -171,6 +204,15 @@ export const postSchema = new Schema({
   },
 });
 
+const parseHighlightRangesAttr = (value: string | undefined) => {
+  if (!value) return [];
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return [];
+  }
+};
+
 const titleNode = (title = "") =>
   title
     ? postSchema.nodes.title.create(null, postSchema.text(title))
@@ -187,7 +229,8 @@ export const normalizePostDoc = (
 ): ProseMirrorNode => {
   if (content?.type === "doc") {
     try {
-      const parsed = postSchema.nodeFromJSON(content);
+      const migrated = migrateCodeBlockLanguageHints(content);
+      const parsed = postSchema.nodeFromJSON(migrated);
       const nodes: ProseMirrorNode[] = [];
       const first = parsed.childCount > 0 ? parsed.child(0) : null;
 

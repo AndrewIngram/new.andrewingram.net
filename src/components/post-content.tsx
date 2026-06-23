@@ -69,12 +69,18 @@ const renderNode = (node: JSONContent, key: number, options: RenderOptions): Rea
       return <li key={key}>{getChildren(node, options)}</li>;
     case "blockquote":
       return <blockquote key={key}>{getChildren(node, options)}</blockquote>;
-    case "codeBlock":
+    case "codeBlock": {
+      const highlightedHtml =
+        typeof attrs.highlightedHtml === "string" ? attrs.highlightedHtml : "";
+      if (highlightedHtml) {
+        return <Fragment key={key}>{renderHighlightedCodeBlock(highlightedHtml)}</Fragment>;
+      }
       return (
         <pre key={key}>
           <code>{getText(node)}</code>
         </pre>
       );
+    }
     case "hardBreak":
       return <br key={key} />;
     case "horizontalRule":
@@ -104,6 +110,13 @@ const renderNode = (node: JSONContent, key: number, options: RenderOptions): Rea
       return <Fragment key={key}>{getChildren(node, options)}</Fragment>;
   }
 };
+
+const renderHighlightedCodeBlock = (html: string) => (
+  <div
+    className="post-code-block-frame"
+    dangerouslySetInnerHTML={{ __html: html }}
+  />
+);
 
 export function PostContent({
   content,

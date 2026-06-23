@@ -47,4 +47,65 @@ describe("post editor schema", () => {
     expect(docToJSON(doc)).toEqual(content);
     expect(extractTitle(docToJSON(doc))).toBe("Post");
   });
+
+  it("serializes code block metadata", () => {
+    const content: JSONContent = {
+      type: "doc",
+      content: [
+        { type: "title", content: [{ type: "text", text: "Post" }] },
+        {
+          type: "codeBlock",
+          attrs: {
+            language: "typescript",
+            highlightRanges: [
+              { from: 2, to: 3 },
+              { from: 10, to: 12 },
+            ],
+          },
+          content: [{ type: "text", text: "const a = 1;\nconst b = 2;" }],
+        },
+      ],
+    };
+
+    expect(docToJSON(normalizePostDoc(content, ""))).toEqual({
+      type: "doc",
+      content: [
+        { type: "title", content: [{ type: "text", text: "Post" }] },
+        {
+          type: "codeBlock",
+          attrs: {
+            language: "typescript",
+            highlightRanges: [{ from: 2, to: 2 }],
+          },
+          content: [{ type: "text", text: "const a = 1;\nconst b = 2;" }],
+        },
+      ],
+    });
+  });
+
+  it("migrates language hint paragraphs before code blocks", () => {
+    const doc = normalizePostDoc(
+      {
+        type: "doc",
+        content: [
+          { type: "title", content: [{ type: "text", text: "Post" }] },
+          { type: "paragraph", content: [{ type: "text", text: "graphql" }] },
+          { type: "codeBlock", content: [{ type: "text", text: "type Query {\n}" }] },
+        ],
+      },
+      "",
+    );
+
+    expect(docToJSON(doc)).toEqual({
+      type: "doc",
+      content: [
+        { type: "title", content: [{ type: "text", text: "Post" }] },
+        {
+          type: "codeBlock",
+          attrs: { language: "graphql", highlightRanges: [] },
+          content: [{ type: "text", text: "type Query {\n}" }],
+        },
+      ],
+    });
+  });
 });

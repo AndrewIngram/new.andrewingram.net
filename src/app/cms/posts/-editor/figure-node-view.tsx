@@ -10,6 +10,7 @@ import { createContext, useContext, type MouseEvent, type ReactNode } from "reac
 import { RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { CodeBlockNodeView } from "./code-block-node-view";
 
 export type FigureReplacementRequest = {
   figurePos: number;
@@ -122,5 +123,6 @@ export function FigureNodeView({
 }
 
 export const nodeViewComponents = {
+  codeBlock: CodeBlockNodeView,
   figure: FigureNodeView,
 };

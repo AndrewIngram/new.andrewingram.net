@@ -41,4 +41,31 @@ describe("PostContent", () => {
     expect(html).toContain('loading="lazy"');
     expect(html).toContain('<figcaption>Photo by <a href="/about">Andrew</a></figcaption>');
   });
+
+  it("renders prepared highlighted code HTML", () => {
+    const html = renderToStaticMarkup(
+      createElement(PostContent, {
+        content: {
+          type: "doc",
+          content: [
+            { type: "title", content: [{ type: "text", text: "Post" }] },
+            {
+              type: "codeBlock",
+              attrs: {
+                language: "typescript",
+                highlightedHtml:
+                  '<pre class="post-code-block"><code><span class="line is-highlighted" data-line="1">const x = 1;</span></code></pre>',
+              },
+              content: [{ type: "text", text: "const x = 1;" }],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html).toContain('class="post-code-block-frame"');
+    expect(html).toContain('class="post-code-block"');
+    expect(html).toContain('data-line="1"');
+    expect(html).toContain("is-highlighted");
+  });
 });

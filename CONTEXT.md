@@ -20,6 +20,18 @@ _Avoid_: Document, editor state
 An image, video, or other media embed placed in **Post content**. A **Media figure** may have one caption authored with the post; library captions are reusable defaults, not linked captions.
 _Avoid_: Attachment, asset
 
+**Code block**:
+A block of source code or structured text placed in **Post content**. A **Code block** has one **Code block language** and may have **Highlighted line ranges**.
+_Avoid_: Snippet, preformatted text
+
+**Code block language**:
+The supported programming or markup language assigned to a **Code block** for editing and public syntax highlighting.
+_Avoid_: Grammar, lexer, mode
+
+**Highlighted line range**:
+One or more authored line spans in a **Code block** that should be visually emphasized when the Post is rendered.
+_Avoid_: Selection, annotation
+
 **Image asset**:
 A reusable uploaded image held by the media library.
 _Avoid_: Image file, media figure
