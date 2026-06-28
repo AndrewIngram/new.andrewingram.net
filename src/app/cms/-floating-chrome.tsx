@@ -37,7 +37,7 @@ export function CmsFloatingChrome({
 }: CmsFloatingChromeProps) {
   return (
     <div className="pointer-events-none fixed inset-x-0 top-0 z-20 flex flex-wrap items-start justify-between gap-3 p-4">
-      <div className="pointer-events-auto rounded-lg border bg-background px-3 py-2 shadow-sm">
+      <div className="floating-menu pointer-events-auto rounded-lg border bg-background px-3 py-2 shadow-sm">
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>

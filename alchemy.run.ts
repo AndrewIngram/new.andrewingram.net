@@ -37,6 +37,19 @@ export const Website = Cloudflare.Vite("website", {
   },
 });
 
+export const DebugWorker = Cloudflare.Worker("debug-worker", {
+  main: "./src/debug-worker.ts",
+  compatibility: {
+    date: "2026-04-30",
+    flags: ["nodejs_compat"],
+  },
+  env: {
+    DB: db,
+    IMAGES: imageBucket,
+    IMAGE_TRANSFORMER: imageTransformer,
+  },
+});
+
 export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
 
 export default Alchemy.Stack(
@@ -47,9 +60,11 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const website = yield* Website;
+    const debugWorker = yield* DebugWorker;
 
     return {
       url: website.url,
+      debugUrl: debugWorker.url,
     };
   }),
 );

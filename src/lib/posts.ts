@@ -6,6 +6,7 @@ import slugify from "slugify";
 import { getDbAsync } from "@/db";
 import { posts } from "@/db/schema";
 import { RecordNotFound } from "./errors";
+import { PostContentSchema, type PostContent } from "./post-content-schema";
 import type { JSONContent } from "./post-content-json";
 
 const PostStatusSchema = Schema.Literals(["draft", "published", "archived"]);
@@ -23,7 +24,7 @@ const PostSchema = Schema.Struct({
 type PostFromSchema = Schema.Schema.Type<typeof PostSchema>;
 export type PostStatus = Schema.Schema.Type<typeof PostStatusSchema>;
 export type Post = Omit<PostFromSchema, "content"> & {
-  content: JSONContent;
+  content: PostContent;
 };
 
 export class PostsLoadAllError extends Data.TaggedError("PostsLoadAllError")<{
@@ -44,9 +45,9 @@ export class PostsBackfillError extends Data.TaggedError("PostsBackfillError")<{
   cause: unknown;
 }> {}
 
-const defaultContent: JSONContent = {
+const defaultContent: PostContent = {
   type: "doc",
-  content: [{ type: "paragraph" }],
+  content: [{ type: "title" }, { type: "paragraph" }],
 };
 
 const postModelName = "posts";
@@ -55,14 +56,43 @@ const toIsoString = (value: Date) => value.toISOString();
 
 const toStatus = (value: typeof posts.$inferSelect.status) => value ?? "draft";
 
-const parseContent = (value: unknown): JSONContent => {
-  if (value == null) return defaultContent;
+const titleNode = (title: string): JSONContent => {
+  const text = title.trim();
+  return text ? { type: "title", content: [{ type: "text", text }] } : { type: "title" };
+};
+
+const normalizeContent = (content: JSONContent, title: string): JSONContent => {
+  if (content.type !== "doc") return content;
+  const children = content.content ?? [];
+  const hasTitle = children[0]?.type === "title";
+  const body = hasTitle ? children.slice(1) : children;
+  return {
+    ...content,
+    content: [
+      hasTitle ? children[0]! : titleNode(title),
+      ...(body.length ? body : [{ type: "paragraph" }]),
+    ],
+  };
+};
+
+const parseContent = (value: unknown, title: string): PostContent => {
+  if (value == null) throw new Error("Post content is required");
+  const parsed = normalizeContent(
+    typeof value === "string" ? (JSON.parse(value) as JSONContent) : (value as JSONContent),
+    title,
+  );
+  const result = PostContentSchema["~standard"].validate(parsed);
+  if (result instanceof Promise) throw new Error("Post content validation must be synchronous");
+  if (result.issues) {
+    throw new Error(result.issues.map((issue) => issue.message).join("; "));
+  }
+  return result.value;
+};
+
+const parseMutableContent = (value: unknown): JSONContent => {
+  if (value == null) throw new Error("Post content is required");
   if (typeof value === "string") {
-    try {
-      return JSON.parse(value) as JSONContent;
-    } catch {
-      return defaultContent;
-    }
+    return JSON.parse(value) as JSONContent;
   }
   return value as JSONContent;
 };
@@ -96,7 +126,7 @@ const toPost = (row: typeof posts.$inferSelect): Post => ({
   slug: row.slug ?? "",
   title: row.title ?? "",
   status: toStatus(row.status),
-  content: parseContent(row.content),
+  content: parseContent(row.content, row.title ?? ""),
   createdAt: toIsoString(row.createdAt ?? new Date(0)),
   updatedAt: toIsoString(row.updatedAt ?? new Date(0)),
 });
@@ -125,7 +155,7 @@ export const createDraftPost = (): Post => {
 type PostInput = {
   title: string;
   status: PostStatus;
-  content: JSONContent;
+  content: PostContent;
   publishedAt?: string | undefined;
 };
 
@@ -181,7 +211,7 @@ export const createPost = (input: CreatePostInput) => {
           slug,
           title: input.title.trim(),
           status: input.status,
-          content: input.content ?? defaultContent,
+          content: input.content,
           createdAt: now,
           updatedAt: now,
         },
@@ -210,7 +240,7 @@ export const updatePost = (input: UpdatePostInput) =>
           slug,
           title: input.title.trim(),
           status: input.status,
-          content: input.content ?? defaultContent,
+          content: input.content,
           updatedAt: now,
         })
         .where(eq(posts.id, input.id));
@@ -283,7 +313,7 @@ export const backfillPostImageDimensions = (dimensions: ImageDimensions) =>
     yield* Effect.forEach(
       rows,
       (row) => {
-        const result = addPostImageDimensions(parseContent(row.content), dimensions);
+        const result = addPostImageDimensions(parseMutableContent(row.content), dimensions);
         if (!result.changed || !row.id) return Effect.void;
         updated += 1;
         return Effect.tryPromise(() =>

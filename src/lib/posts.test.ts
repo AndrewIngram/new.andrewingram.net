@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => {
   const limit = vi.fn();
   const selectWhere = vi.fn(() => ({ limit }));
-  const from = vi.fn(() => ({ where: selectWhere }));
+  const orderBy = vi.fn();
+  const from = vi.fn(() => ({ orderBy, where: selectWhere }));
   const select = vi.fn(() => ({ from }));
   const updateWhere = vi.fn();
   const set = vi.fn(() => ({ where: updateWhere }));
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => {
   return {
     db: { select, update, transaction },
     limit,
+    orderBy,
     updateWhere,
     transaction,
   };
@@ -23,7 +25,36 @@ vi.mock("@/db", () => ({
   getDbAsync: () => Promise.resolve(mocks.db),
 }));
 
-import { addPostImageDimensions, updatePost } from "./posts";
+import { addPostImageDimensions, getAllPosts, updatePost } from "./posts";
+
+describe("getAllPosts", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.orderBy.mockResolvedValue([
+      {
+        id: "post-1",
+        slug: "legacy-post",
+        title: "Legacy post",
+        status: "draft",
+        content: {
+          type: "doc",
+          content: [{ type: "paragraph", content: [{ type: "text", text: "Body" }] }],
+        },
+        createdAt: new Date("2024-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2024-01-02T00:00:00.000Z"),
+      },
+    ]);
+  });
+
+  it("normalizes legacy content without a title node", async () => {
+    const posts = await Effect.runPromise(getAllPosts());
+
+    expect(posts[0]?.content.content).toEqual([
+      { type: "title", content: [{ type: "text", text: "Legacy post" }] },
+      { type: "paragraph", content: [{ type: "text", text: "Body" }] },
+    ]);
+  });
+});
 
 describe("updatePost", () => {
   beforeEach(() => {
@@ -44,7 +75,7 @@ describe("updatePost", () => {
         id: "post-1",
         title: "Updated post",
         status: "draft",
-        content: { type: "doc", content: [{ type: "paragraph" }] },
+        content: { type: "doc", content: [{ type: "title" }, { type: "paragraph" }] },
       }),
     );
 
@@ -60,6 +91,7 @@ describe("addPostImageDimensions", () => {
       {
         type: "doc",
         content: [
+          { type: "title" },
           {
             type: "figure",
             content: [{ type: "image", attrs: { src: "/images/image-1", alt: "Cover" } }],
@@ -70,7 +102,7 @@ describe("addPostImageDimensions", () => {
     );
 
     expect(result.changed).toBe(true);
-    expect(result.content.content?.[0].content?.[0].attrs).toEqual({
+    expect(result.content.content?.[1].content?.[0].attrs).toEqual({
       src: "/images/image-1",
       alt: "Cover",
       width: 1200,

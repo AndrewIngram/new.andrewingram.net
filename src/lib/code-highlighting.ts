@@ -12,6 +12,7 @@ import {
   lineIsHighlighted,
   migrateCodeBlockLanguageHints,
 } from "./code-blocks";
+import type { PreparedPostContent } from "./post-content-schema";
 import type { JSONContent, JSONValue } from "./post-content-json";
 
 const theme = {
@@ -58,7 +59,9 @@ export const highlightCodeBlock = async (node: JSONContent) => {
   });
 };
 
-const prepareMigratedPostContentForRender = async (content: JSONContent): Promise<JSONContent> => {
+const prepareMigratedPostContentForRender = async (
+  content: JSONContent,
+): Promise<PreparedPostContent> => {
   if (content.type === "codeBlock") {
     const highlightedHtml = await highlightCodeBlock(content);
     return {
@@ -67,15 +70,15 @@ const prepareMigratedPostContentForRender = async (content: JSONContent): Promis
         ...content.attrs,
         highlightedHtml: highlightedHtml as JSONValue,
       },
-    };
+    } as PreparedPostContent;
   }
 
-  if (!content.content) return content;
+  if (!content.content) return content as PreparedPostContent;
 
   return {
     ...content,
     content: await Promise.all(content.content.map(prepareMigratedPostContentForRender)),
-  };
+  } as PreparedPostContent;
 };
 
 export const preparePostContentForRender = async (content: JSONContent) =>

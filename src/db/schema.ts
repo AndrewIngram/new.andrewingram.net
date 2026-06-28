@@ -16,7 +16,7 @@ export const posts = sqliteTable(
       .notNull()
       .default("draft"),
     title: text("title").notNull(),
-    content: blob({ mode: "json" }),
+    content: blob({ mode: "json" }).notNull(),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
   },

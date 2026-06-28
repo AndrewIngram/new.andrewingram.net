@@ -1,6 +1,7 @@
 import { Fragment, type ElementType, type ReactNode } from "react";
-import type { JSONContent } from "@/lib/post-content-json";
 import { imageRenditionUrl, imageSrcSet, POST_IMAGE_SIZES } from "@/lib/image-delivery";
+import type { PreparedPostContent } from "@/lib/post-content-schema";
+import type { JSONContent } from "@/lib/post-content-json";
 
 type RenderOptions = {
   skipTitle?: boolean;
@@ -122,8 +123,8 @@ export function PostContent({
   content,
   skipTitle = false,
 }: {
-  content: JSONContent;
+  content: PreparedPostContent;
   skipTitle?: boolean;
 }) {
-  return <>{renderNode(content, 0, { skipTitle })}</>;
+  return <>{renderNode(content as JSONContent, 0, { skipTitle })}</>;
 }
