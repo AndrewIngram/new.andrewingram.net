@@ -1,6 +1,13 @@
 import { Effect } from "effect";
 
-export const AppRuntime = Effect;
+import { DB, dbLive } from "@/db/db";
+import { env } from "@/env";
+
+export const AppRuntime = {
+  runPromise<A, E>(effect: Effect.Effect<A, E, DB>) {
+    return Effect.runPromise(effect.pipe(Effect.provide(dbLive(env.DB))));
+  },
+};
 
 type MutationOptions = {
   name: string;
@@ -9,7 +16,7 @@ type MutationOptions = {
 };
 
 export async function runMutation<A, E>(
-  effect: Effect.Effect<A, E>,
+  effect: Effect.Effect<A, E, DB>,
   { name, errorMessage, context = {} }: MutationOptions,
 ): Promise<A> {
   try {

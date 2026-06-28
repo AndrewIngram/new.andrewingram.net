@@ -1,16 +1,20 @@
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DB } from "@/db/db";
+
 const mocks = vi.hoisted(() => {
-  const limit = vi.fn();
+  const limit = vi.fn(() => Effect.succeed([]));
   const selectWhere = vi.fn(() => ({ limit }));
-  const orderBy = vi.fn();
+  const orderBy = vi.fn(() => Effect.succeed([]));
   const from = vi.fn(() => ({ orderBy, where: selectWhere }));
   const select = vi.fn(() => ({ from }));
-  const updateWhere = vi.fn();
+  const updateWhere = vi.fn(() => Effect.succeed(undefined));
   const set = vi.fn(() => ({ where: updateWhere }));
   const update = vi.fn(() => ({ set }));
-  const transaction = vi.fn(() => Promise.reject(new Error("D1 does not support BEGIN")));
+  const transaction = vi.fn(() =>
+    Promise.reject(new Error("D1 does not support BEGIN")),
+  );
 
   return {
     db: { select, update, transaction },
@@ -21,11 +25,10 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("@/db", () => ({
-  getDbAsync: () => Promise.resolve(mocks.db),
-}));
-
 import { addPostImageDimensions, getAllPosts, updatePost } from "./posts";
+
+const provideDb = <A, E>(effect: Effect.Effect<A, E, DB>) =>
+  effect.pipe(Layer.provide(Layer.succeed(DB, mocks.db as never)));
 
 describe("getAllPosts", () => {
   beforeEach(() => {
@@ -38,7 +41,9 @@ describe("getAllPosts", () => {
         status: "draft",
         content: {
           type: "doc",
-          content: [{ type: "paragraph", content: [{ type: "text", text: "Body" }] }],
+          content: [
+            { type: "paragraph", content: [{ type: "text", text: "Body" }] },
+          ],
         },
         createdAt: new Date("2024-01-01T00:00:00.000Z"),
         updatedAt: new Date("2024-01-02T00:00:00.000Z"),
@@ -47,7 +52,7 @@ describe("getAllPosts", () => {
   });
 
   it("normalizes legacy content without a title node", async () => {
-    const posts = await Effect.runPromise(getAllPosts());
+    const posts = await Effect.runPromise(provideDb(getAllPosts()));
 
     expect(posts[0]?.content.content).toEqual([
       { type: "title", content: [{ type: "text", text: "Legacy post" }] },
@@ -71,12 +76,17 @@ describe("updatePost", () => {
 
   it("updates an existing post without an explicit transaction", async () => {
     await Effect.runPromise(
-      updatePost({
-        id: "post-1",
-        title: "Updated post",
-        status: "draft",
-        content: { type: "doc", content: [{ type: "title" }, { type: "paragraph" }] },
-      }),
+      provideDb(
+        updatePost({
+          id: "post-1",
+          title: "Updated post",
+          status: "draft",
+          content: {
+            type: "doc",
+            content: [{ type: "title" }, { type: "paragraph" }],
+          },
+        }),
+      ),
     );
 
     expect(mocks.transaction).not.toHaveBeenCalled();
@@ -94,7 +104,12 @@ describe("addPostImageDimensions", () => {
           { type: "title" },
           {
             type: "figure",
-            content: [{ type: "image", attrs: { src: "/images/image-1", alt: "Cover" } }],
+            content: [
+              {
+                type: "image",
+                attrs: { src: "/images/image-1", alt: "Cover" },
+              },
+            ],
           },
         ],
       },
