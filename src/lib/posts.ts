@@ -58,7 +58,9 @@ const toStatus = (value: typeof posts.$inferSelect.status) => value ?? "draft";
 
 const titleNode = (title: string): JSONContent => {
   const text = title.trim();
-  return text ? { type: "title", content: [{ type: "text", text }] } : { type: "title" };
+  return text
+    ? { type: "title", content: [{ type: "text", text }] }
+    : { type: "title" };
 };
 
 const normalizeContent = (content: JSONContent, title: string): JSONContent => {
@@ -78,11 +80,14 @@ const normalizeContent = (content: JSONContent, title: string): JSONContent => {
 const parseContent = (value: unknown, title: string): PostContent => {
   if (value == null) throw new Error("Post content is required");
   const parsed = normalizeContent(
-    typeof value === "string" ? (JSON.parse(value) as JSONContent) : (value as JSONContent),
+    typeof value === "string"
+      ? (JSON.parse(value) as JSONContent)
+      : (value as JSONContent),
     title,
   );
   const result = PostContentSchema["~standard"].validate(parsed);
-  if (result instanceof Promise) throw new Error("Post content validation must be synchronous");
+  if (result instanceof Promise)
+    throw new Error("Post content validation must be synchronous");
   if (result.issues) {
     throw new Error(result.issues.map((issue) => issue.message).join("; "));
   }
@@ -104,7 +109,11 @@ type PostRow = typeof posts.$inferSelect;
 const getBaseSlug = (title: string) =>
   slugify(title, { lower: true, strict: true, trim: true }) || "post";
 
-const getUniqueSlug = async (db: Db | Tx, title: string, excludeId?: string | null) => {
+const getUniqueSlug = async (
+  db: Db | Tx,
+  title: string,
+  excludeId?: string | null,
+) => {
   const baseSlug = getBaseSlug(title);
   let suffix = 1;
 
@@ -113,7 +122,11 @@ const getUniqueSlug = async (db: Db | Tx, title: string, excludeId?: string | nu
     const rows = await db
       .select({ id: posts.id })
       .from(posts)
-      .where(excludeId ? and(eq(posts.slug, slug), ne(posts.id, excludeId)) : eq(posts.slug, slug))
+      .where(
+        excludeId
+          ? and(eq(posts.slug, slug), ne(posts.id, excludeId))
+          : eq(posts.slug, slug),
+      )
       .limit(1);
 
     if (rows.length === 0) return slug;
@@ -169,7 +182,8 @@ export type SavePostInput = PostInput & {
 
 const getDb = () => Effect.tryPromise(() => getDbAsync());
 
-const recordNotFound = (id: string) => new RecordNotFound({ model: postModelName, id });
+const recordNotFound = (id: string) =>
+  new RecordNotFound({ model: postModelName, id });
 
 export const getAllPosts = () =>
   Effect.gen(function* () {
@@ -177,7 +191,9 @@ export const getAllPosts = () =>
     const rows = yield* Effect.tryPromise(() =>
       db.select().from(posts).orderBy(desc(posts.updatedAt)),
     );
-    return yield* Effect.tryPromise(() => Promise.all(rows.map((row) => ensurePostSlug(db, row))));
+    return yield* Effect.tryPromise(() =>
+      Promise.all(rows.map((row) => ensurePostSlug(db, row))),
+    );
   }).pipe(Effect.mapError((cause) => new PostsLoadAllError({ cause })));
 
 export const getPostById = (id: string) =>
@@ -193,7 +209,9 @@ export const getPostById = (id: string) =>
     return yield* Effect.tryPromise(() => ensurePostSlug(db, post));
   }).pipe(
     Effect.mapError((cause) =>
-      cause instanceof RecordNotFound ? cause : new PostsLoadError({ id, cause }),
+      cause instanceof RecordNotFound
+        ? cause
+        : new PostsLoadError({ id, cause }),
     ),
   );
 
@@ -226,13 +244,18 @@ export const updatePost = (input: UpdatePostInput) =>
     const db = yield* getDb();
     const now = new Date();
     return yield* Effect.tryPromise(async () => {
-      const existing = await db.select().from(posts).where(eq(posts.id, input.id)).limit(1);
+      const existing = await db
+        .select()
+        .from(posts)
+        .where(eq(posts.id, input.id))
+        .limit(1);
 
       if (!existing[0]) {
         throw recordNotFound(input.id);
       }
 
-      const slug = existing[0].slug ?? (await getUniqueSlug(db, input.title, input.id));
+      const slug =
+        existing[0].slug ?? (await getUniqueSlug(db, input.title, input.id));
 
       await db
         .update(posts)
@@ -249,7 +272,9 @@ export const updatePost = (input: UpdatePostInput) =>
     });
   }).pipe(
     Effect.mapError((cause) =>
-      cause instanceof RecordNotFound ? cause : new PostsSaveError({ id: input.id, cause }),
+      cause instanceof RecordNotFound
+        ? cause
+        : new PostsSaveError({ id: input.id, cause }),
     ),
   );
 
@@ -266,7 +291,9 @@ export const getPostBySlug = (slug: string) =>
     return toPost(post);
   }).pipe(
     Effect.mapError((cause) =>
-      cause instanceof RecordNotFound ? cause : new PostsLoadError({ id: slug, cause }),
+      cause instanceof RecordNotFound
+        ? cause
+        : new PostsLoadError({ id: slug, cause }),
     ),
   );
 
@@ -290,7 +317,10 @@ export const addPostImageDimensions = (
   const src = typeof node.attrs?.src === "string" ? node.attrs.src : "";
   const match = /^\/images\/([^/?#]+)$/.exec(src);
   const size = match ? dimensions.get(match[1]) : undefined;
-  if (!size || (node.attrs?.width === size.width && node.attrs?.height === size.height)) {
+  if (
+    !size ||
+    (node.attrs?.width === size.width && node.attrs?.height === size.height)
+  ) {
     return { content: content ? { ...node, content } : node, changed };
   }
 
@@ -313,11 +343,17 @@ export const backfillPostImageDimensions = (dimensions: ImageDimensions) =>
     yield* Effect.forEach(
       rows,
       (row) => {
-        const result = addPostImageDimensions(parseMutableContent(row.content), dimensions);
+        const result = addPostImageDimensions(
+          parseMutableContent(row.content),
+          dimensions,
+        );
         if (!result.changed || !row.id) return Effect.void;
         updated += 1;
         return Effect.tryPromise(() =>
-          db.update(posts).set({ content: result.content }).where(eq(posts.id, row.id!)),
+          db
+            .update(posts)
+            .set({ content: result.content })
+            .where(eq(posts.id, row.id!)),
         );
       },
       { concurrency: 1 },
