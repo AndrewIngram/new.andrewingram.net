@@ -7,7 +7,7 @@ import { getPostBySlug } from "@/lib/posts";
 import { AppRuntime } from "@/lib/runtime";
 
 const getPost = createServerFn({ method: "GET" })
-  .inputValidator((slug: string) => slug)
+  .validator((slug: string) => slug)
   .handler(async ({ data: slug }) => {
     const post = await AppRuntime.runPromise(getPostBySlug(slug)).catch(
       () => null,

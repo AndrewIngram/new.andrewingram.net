@@ -13,7 +13,7 @@ const getPosts = createServerFn({ method: "GET" }).handler(() =>
 );
 
 export const Route = createFileRoute("/cms/posts/")({
-  loader: () => getPosts(),
+  loader: () => getPosts({}),
   component: PostsIndex,
 });
 

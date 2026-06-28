@@ -9,7 +9,7 @@ const getHomePosts = createServerFn({ method: "GET" }).handler(() =>
 );
 
 export const Route = createFileRoute("/_site/")({
-  loader: () => getHomePosts(),
+  loader: () => getHomePosts({}),
   component: Home,
 });
 

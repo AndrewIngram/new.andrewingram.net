@@ -4,7 +4,7 @@ import { saveImageUpload } from "@/lib/images";
 import { runMutation } from "@/lib/runtime";
 
 export const uploadImageAction = createServerFn({ method: "POST" })
-  .inputValidator((formData: FormData) => formData)
+  .validator((formData: FormData) => formData)
   .handler(async ({ data: formData }) => {
     const file = formData.get("file");
     const caption = formData.get("caption");

@@ -4,7 +4,7 @@ import { createPost, updatePost, type SavePostInput } from "@/lib/posts";
 import { runMutation } from "@/lib/runtime";
 
 export const savePostAction = createServerFn({ method: "POST" })
-  .inputValidator((input: SavePostInput) => input)
+  .validator((input: SavePostInput) => input)
   .handler(({ data: input }) => {
     if (input.id === "new") {
       const { id: _, ...rest } = input;

@@ -10,7 +10,7 @@ import { savePostAction } from "./-actions";
 import Editor from "./-editor";
 
 const getPostEditorData = createServerFn({ method: "GET" })
-  .inputValidator((id: string) => id)
+  .validator((id: string) => id)
   .handler(async ({ data: id }) => {
     const post =
       id === "new"
@@ -27,10 +27,7 @@ const getPostEditorData = createServerFn({ method: "GET" })
   });
 
 export const Route = createFileRoute("/cms/posts/$id")({
-  loader: ({ params }) => {
-    console.log("Loading post editor data for id:", params.id);
-    return getPostEditorData({ data: params.id });
-  },
+  loader: ({ params }) => getPostEditorData({ data: params.id }),
   component: PostEditorPage,
 });
 

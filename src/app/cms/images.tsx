@@ -15,7 +15,7 @@ const getImages = createServerFn({ method: "GET" }).handler(() =>
 );
 
 export const Route = createFileRoute("/cms/images")({
-  loader: () => getImages(),
+  loader: () => getImages({}),
   component: ImagesPage,
 });
 
