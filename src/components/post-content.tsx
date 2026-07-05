@@ -60,7 +60,12 @@ const renderNode = (node: JSONContent, key: number, options: RenderOptions): Rea
     case "heading": {
       const level = Number(attrs.level);
       const Tag = `h${level >= 1 && level <= 6 ? level : 2}` as ElementType;
-      return <Tag key={key}>{getChildren(node, options)}</Tag>;
+      const id = typeof attrs.id === "string" ? attrs.id : undefined;
+      return (
+        <Tag key={key} id={id}>
+          {getChildren(node, options)}
+        </Tag>
+      );
     }
     case "bulletList":
       return <ul key={key}>{getChildren(node, options)}</ul>;

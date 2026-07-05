@@ -4,5 +4,6 @@
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "oxc.oxc-vscode",
   "oxc.enable": true,
-  "oxc.fmt.configPath": ""
+  "oxc.fmt.configPath": "",
+  "typescript.native-preview.tsdk": "node_modules/@typescript/native-preview"
 }

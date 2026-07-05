@@ -1,10 +1,17 @@
 import * as cf from "cloudflare:workers";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { WebsiteEnv } from "../alchemy.run.ts";
 
-// In development mode with TanStack Start, `import { env } from "cloudflare:workers"` does not work at the top level.
-// As a workaround, we use a proxy to access the env object.
+const requestEnv = new AsyncLocalStorage<WebsiteEnv>();
+
+export const runWithEnv = <A>(env: WebsiteEnv, fn: () => A) => requestEnv.run(env, fn);
+
+export const envSource = () => (requestEnv.getStore() ? "request-env" : "cloudflare-workers");
+
+const getEnv = () => requestEnv.getStore() ?? (cf.env as unknown as WebsiteEnv);
+
 export const env = new Proxy({} as WebsiteEnv, {
   get(_, prop) {
-    return cf.env[prop as keyof typeof cf.env];
+    return getEnv()[prop as keyof WebsiteEnv];
   },
 });

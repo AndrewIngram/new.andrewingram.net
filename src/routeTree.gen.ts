@@ -14,6 +14,9 @@ import { Route as SiteRouteRouteImport } from './app/_site/route'
 import { Route as CmsIndexRouteImport } from './app/cms/index'
 import { Route as SiteIndexRouteImport } from './app/_site/index'
 import { Route as ImagesIdRouteImport } from './app/images/$id'
+import { Route as DebugAppRuntimeRouteImport } from './app/debug/app-runtime'
+import { Route as DebugAppBindingsRouteImport } from './app/debug/app-bindings'
+import { Route as CmsWritingFeedbackRouteImport } from './app/cms/writing-feedback'
 import { Route as CmsImagesRouteImport } from './app/cms/images'
 import { Route as CmsImageBackfillRouteImport } from './app/cms/image-backfill'
 import { Route as CmsPostsIndexRouteImport } from './app/cms/posts/index'
@@ -43,6 +46,21 @@ const ImagesIdRoute = ImagesIdRouteImport.update({
   id: '/images/$id',
   path: '/images/$id',
   getParentRoute: () => rootRouteImport,
+} as any)
+const DebugAppRuntimeRoute = DebugAppRuntimeRouteImport.update({
+  id: '/debug/app-runtime',
+  path: '/debug/app-runtime',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DebugAppBindingsRoute = DebugAppBindingsRouteImport.update({
+  id: '/debug/app-bindings',
+  path: '/debug/app-bindings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CmsWritingFeedbackRoute = CmsWritingFeedbackRouteImport.update({
+  id: '/writing-feedback',
+  path: '/writing-feedback',
+  getParentRoute: () => CmsRouteRoute,
 } as any)
 const CmsImagesRoute = CmsImagesRouteImport.update({
   id: '/images',
@@ -75,6 +93,9 @@ export interface FileRoutesByFullPath {
   '/cms': typeof CmsRouteRouteWithChildren
   '/cms/image-backfill': typeof CmsImageBackfillRoute
   '/cms/images': typeof CmsImagesRoute
+  '/cms/writing-feedback': typeof CmsWritingFeedbackRoute
+  '/debug/app-bindings': typeof DebugAppBindingsRoute
+  '/debug/app-runtime': typeof DebugAppRuntimeRoute
   '/images/$id': typeof ImagesIdRoute
   '/cms/': typeof CmsIndexRoute
   '/posts/$slug': typeof SitePostsSlugRoute
@@ -84,6 +105,9 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/cms/image-backfill': typeof CmsImageBackfillRoute
   '/cms/images': typeof CmsImagesRoute
+  '/cms/writing-feedback': typeof CmsWritingFeedbackRoute
+  '/debug/app-bindings': typeof DebugAppBindingsRoute
+  '/debug/app-runtime': typeof DebugAppRuntimeRoute
   '/images/$id': typeof ImagesIdRoute
   '/': typeof SiteIndexRoute
   '/cms': typeof CmsIndexRoute
@@ -97,6 +121,9 @@ export interface FileRoutesById {
   '/cms': typeof CmsRouteRouteWithChildren
   '/cms/image-backfill': typeof CmsImageBackfillRoute
   '/cms/images': typeof CmsImagesRoute
+  '/cms/writing-feedback': typeof CmsWritingFeedbackRoute
+  '/debug/app-bindings': typeof DebugAppBindingsRoute
+  '/debug/app-runtime': typeof DebugAppRuntimeRoute
   '/images/$id': typeof ImagesIdRoute
   '/_site/': typeof SiteIndexRoute
   '/cms/': typeof CmsIndexRoute
@@ -111,6 +138,9 @@ export interface FileRouteTypes {
     | '/cms'
     | '/cms/image-backfill'
     | '/cms/images'
+    | '/cms/writing-feedback'
+    | '/debug/app-bindings'
+    | '/debug/app-runtime'
     | '/images/$id'
     | '/cms/'
     | '/posts/$slug'
@@ -120,6 +150,9 @@ export interface FileRouteTypes {
   to:
     | '/cms/image-backfill'
     | '/cms/images'
+    | '/cms/writing-feedback'
+    | '/debug/app-bindings'
+    | '/debug/app-runtime'
     | '/images/$id'
     | '/'
     | '/cms'
@@ -132,6 +165,9 @@ export interface FileRouteTypes {
     | '/cms'
     | '/cms/image-backfill'
     | '/cms/images'
+    | '/cms/writing-feedback'
+    | '/debug/app-bindings'
+    | '/debug/app-runtime'
     | '/images/$id'
     | '/_site/'
     | '/cms/'
@@ -143,6 +179,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   SiteRouteRoute: typeof SiteRouteRouteWithChildren
   CmsRouteRoute: typeof CmsRouteRouteWithChildren
+  DebugAppBindingsRoute: typeof DebugAppBindingsRoute
+  DebugAppRuntimeRoute: typeof DebugAppRuntimeRoute
   ImagesIdRoute: typeof ImagesIdRoute
 }
 
@@ -182,6 +220,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/images/$id'
       preLoaderRoute: typeof ImagesIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/debug/app-runtime': {
+      id: '/debug/app-runtime'
+      path: '/debug/app-runtime'
+      fullPath: '/debug/app-runtime'
+      preLoaderRoute: typeof DebugAppRuntimeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/debug/app-bindings': {
+      id: '/debug/app-bindings'
+      path: '/debug/app-bindings'
+      fullPath: '/debug/app-bindings'
+      preLoaderRoute: typeof DebugAppBindingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cms/writing-feedback': {
+      id: '/cms/writing-feedback'
+      path: '/writing-feedback'
+      fullPath: '/cms/writing-feedback'
+      preLoaderRoute: typeof CmsWritingFeedbackRouteImport
+      parentRoute: typeof CmsRouteRoute
     }
     '/cms/images': {
       id: '/cms/images'
@@ -238,6 +297,7 @@ const SiteRouteRouteWithChildren = SiteRouteRoute._addFileChildren(
 interface CmsRouteRouteChildren {
   CmsImageBackfillRoute: typeof CmsImageBackfillRoute
   CmsImagesRoute: typeof CmsImagesRoute
+  CmsWritingFeedbackRoute: typeof CmsWritingFeedbackRoute
   CmsIndexRoute: typeof CmsIndexRoute
   CmsPostsIdRoute: typeof CmsPostsIdRoute
   CmsPostsIndexRoute: typeof CmsPostsIndexRoute
@@ -246,6 +306,7 @@ interface CmsRouteRouteChildren {
 const CmsRouteRouteChildren: CmsRouteRouteChildren = {
   CmsImageBackfillRoute: CmsImageBackfillRoute,
   CmsImagesRoute: CmsImagesRoute,
+  CmsWritingFeedbackRoute: CmsWritingFeedbackRoute,
   CmsIndexRoute: CmsIndexRoute,
   CmsPostsIdRoute: CmsPostsIdRoute,
   CmsPostsIndexRoute: CmsPostsIndexRoute,
@@ -258,6 +319,8 @@ const CmsRouteRouteWithChildren = CmsRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   SiteRouteRoute: SiteRouteRouteWithChildren,
   CmsRouteRoute: CmsRouteRouteWithChildren,
+  DebugAppBindingsRoute: DebugAppBindingsRoute,
+  DebugAppRuntimeRoute: DebugAppRuntimeRoute,
   ImagesIdRoute: ImagesIdRoute,
 }
 export const routeTree = rootRouteImport

@@ -5,6 +5,7 @@ import "prosemirror-view/style/prosemirror.css";
 import {
   type FormEvent,
   type MutableRefObject,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -16,8 +17,14 @@ import type { EditorView } from "prosemirror-view";
 
 import type { Post, SavePostInput } from "@/lib/posts";
 import type { ImageAsset } from "@/lib/images";
+import type {
+  AddWritingFeedbackDictionaryWordInput,
+  AddWritingFeedbackSuppressionInput,
+  WritingFeedbackPreferences,
+} from "@/lib/writing-feedback-preferences";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   Sheet,
   SheetContent,
@@ -35,20 +42,45 @@ import {
   nodeViewComponents,
 } from "./-editor/figure-node-view";
 import { FloatingToolbar } from "./-editor/floating-toolbar";
-import { editorPlugins, externalPlugins } from "./-editor/plugins";
+import { createEditorPlugins, externalPlugins } from "./-editor/plugins";
 import { docToJSON, extractTitle, normalizePostDoc, postSchema } from "./-editor/schema";
 import { SlashMenu } from "./-editor/slash-menu";
+import { WritingFeedbackPopover } from "./-editor/writing-feedback-popover";
 
 type EditorProps = {
   post: Post;
   savePost: (input: SavePostInput) => Promise<{ id: string }>;
+  publishPost: (input: SavePostInput) => Promise<{ id: string }>;
+  unpublishPost: (id: string) => Promise<{ id: string }>;
+  archivePost: (id: string) => Promise<{ id: string }>;
+  discardPostDraft: (id: string) => Promise<{ id: string }>;
   uploadImage: (formData: FormData) => Promise<ImageAsset>;
   images: ImageAsset[];
+  writingFeedbackPreferences: WritingFeedbackPreferences;
+  addWritingFeedbackSuppression: (
+    input: AddWritingFeedbackSuppressionInput,
+  ) => Promise<{ id: string }>;
+  addWritingFeedbackDictionaryWord: (
+    input: AddWritingFeedbackDictionaryWordInput,
+  ) => Promise<{ id: string }>;
 };
 
 type ImageSheetIntent = { type: "insert" } | { type: "replace"; figurePos: number };
 
 const imageIdFromSrc = (src: string) => /^\/images\/([^/?#]+)/.exec(src)?.[1] ?? null;
+
+const toDateTimeLocalValue = (value?: string) => {
+  const date = value ? new Date(value) : new Date();
+  const validDate = Number.isNaN(date.getTime()) ? new Date() : date;
+  return new Date(validDate.getTime() - validDate.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
+};
+
+const fromDateTimeLocalValue = (value: string) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+};
 
 function EditorViewTracker({
   editorViewRef,
@@ -67,24 +99,46 @@ function EditorViewTracker({
   return null;
 }
 
-const PostEditor = ({ post, savePost, uploadImage, images }: EditorProps) => {
+const PostEditor = ({
+  post,
+  savePost,
+  publishPost,
+  unpublishPost,
+  archivePost,
+  discardPostDraft,
+  uploadImage,
+  images,
+  writingFeedbackPreferences,
+  addWritingFeedbackSuppression,
+  addWritingFeedbackDictionaryWord,
+}: EditorProps) => {
   const router = useRouter();
   const editorViewRef = useRef<EditorView | null>(null);
   const initialDoc = useMemo(
     () => normalizePostDoc(post.content, post.title),
     [post.content, post.title],
   );
+  const plugins = useMemo(
+    () =>
+      createEditorPlugins({
+        writingFeedback: { preferences: writingFeedbackPreferences },
+      }),
+    [writingFeedbackPreferences],
+  );
   const [editorState, setEditorState] = useState(() =>
     EditorState.create({
       schema: postSchema,
       doc: initialDoc,
-      plugins: editorPlugins,
+      plugins,
     }),
   );
   const currentContent = docToJSON(editorState.doc);
   const currentTitle = extractTitle(currentContent) || post.title || "Untitled post";
-  const [status] = useState(post.status);
-  const [publishedAt, setPublishedAt] = useState(post.publishedAt ?? "");
+  const [slug, setSlug] = useState(post.slug);
+  const [showOutline, setShowOutline] = useState(post.showOutline);
+  const [publicationDate, setPublicationDate] = useState(() =>
+    toDateTimeLocalValue(post.publishedAt),
+  );
   const [isSaving, startTransition] = useTransition();
   const [saveError, setSaveError] = useState<string | null>(null);
   const [imageSheetIntent, setImageSheetIntent] = useState<ImageSheetIntent | null>(null);
@@ -104,23 +158,36 @@ const PostEditor = ({ post, savePost, uploadImage, images }: EditorProps) => {
     setEditorState((state) => state.apply(transaction));
   };
 
-  const handleSave = () => {
+  useEffect(() => {
+    setEditorState(
+      EditorState.create({
+        schema: postSchema,
+        doc: initialDoc,
+        plugins,
+      }),
+    );
+    setSlug(post.slug);
+    setShowOutline(post.showOutline);
+    setPublicationDate(toDateTimeLocalValue(post.publishedAt));
+  }, [initialDoc, plugins, post.publishedAt, post.showOutline, post.slug]);
+
+  const getDraftInput = (): SavePostInput => {
     const rawContent = docToJSON(editorState.doc);
     const nextTitle = extractTitle(rawContent);
-    const content = docToJSON(normalizePostDoc(rawContent, nextTitle));
-    const nextPublishedAt = publishedAt || (status === "published" ? new Date().toISOString() : "");
+    return {
+      id: post.id,
+      title: nextTitle,
+      slug,
+      content: docToJSON(normalizePostDoc(rawContent, nextTitle)),
+      showOutline,
+    };
+  };
 
+  const runPostMutation = (mutation: () => Promise<{ id: string }>) => {
     setSaveError(null);
     startTransition(async () => {
       try {
-        const result = await savePost({
-          id: post.id,
-          title: nextTitle,
-          status,
-          content,
-          publishedAt: nextPublishedAt || undefined,
-        });
-        setPublishedAt(nextPublishedAt);
+        const result = await mutation();
         if (post.id === "new" && result.id) {
           await router.navigate({
             to: "/cms/posts/$id",
@@ -134,6 +201,62 @@ const PostEditor = ({ post, savePost, uploadImage, images }: EditorProps) => {
           error instanceof Error && error.message ? error.message : "Unable to save post.",
         );
       }
+    });
+  };
+
+  const handleSave = () => {
+    runPostMutation(() => savePost(getDraftInput()));
+  };
+
+  const handlePublish = () => {
+    runPostMutation(() =>
+      publishPost({
+        ...getDraftInput(),
+        publishedAt: fromDateTimeLocalValue(publicationDate),
+      }),
+    );
+  };
+
+  const handleUnpublish = () => {
+    if (post.id === "new") return;
+    runPostMutation(() => unpublishPost(post.id));
+  };
+
+  const handleDiscardDraft = () => {
+    if (post.id === "new") return;
+    runPostMutation(() => discardPostDraft(post.id));
+  };
+
+  const handleArchive = () => {
+    if (post.id === "new") return;
+    runPostMutation(() => archivePost(post.id));
+  };
+
+  const persistWritingFeedbackSuppression = ({
+    scope,
+    ...input
+  }: Omit<AddWritingFeedbackSuppressionInput, "postId">) => {
+    if (scope === "post" && post.id === "new") return;
+    void addWritingFeedbackSuppression({
+      ...input,
+      scope,
+      ...(scope === "post" ? { postId: post.id } : {}),
+    }).catch((error: unknown) => {
+      console.warn("[writing-feedback] unable to persist suppression", error);
+    });
+  };
+
+  const persistWritingFeedbackDictionaryWord = ({
+    scope,
+    word,
+  }: Omit<AddWritingFeedbackDictionaryWordInput, "postId">) => {
+    if (scope === "post" && post.id === "new") return;
+    void addWritingFeedbackDictionaryWord({
+      scope,
+      word,
+      ...(scope === "post" ? { postId: post.id } : {}),
+    }).catch((error: unknown) => {
+      console.warn("[writing-feedback] unable to persist dictionary word", error);
     });
   };
 
@@ -320,7 +443,11 @@ const PostEditor = ({ post, savePost, uploadImage, images }: EditorProps) => {
         collection="posts"
         currentPage={currentTitle}
         actions={
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <span className="text-xs text-gray-500">
+              {post.status}
+              {post.hasDraftChanges && post.hasPublishedVersion ? " + draft changes" : ""}
+            </span>
             {saveError ? (
               <span role="alert" className="text-xs text-red-600">
                 {saveError}
@@ -328,14 +455,62 @@ const PostEditor = ({ post, savePost, uploadImage, images }: EditorProps) => {
             ) : null}
             {isSaving ? <span className="text-xs text-gray-500">Saving...</span> : null}
             <Button onClick={handleSave} disabled={isSaving}>
-              Save
+              Save Draft
             </Button>
+            <Button onClick={handlePublish} disabled={isSaving}>
+              {post.hasPublishedVersion ? "Republish" : "Publish"}
+            </Button>
+            {post.status === "published" && post.id !== "new" ? (
+              <Button variant="outline" onClick={handleUnpublish} disabled={isSaving}>
+                Unpublish
+              </Button>
+            ) : null}
+            {post.hasPublishedVersion && post.hasDraftChanges && post.id !== "new" ? (
+              <Button variant="outline" onClick={handleDiscardDraft} disabled={isSaving}>
+                Discard Draft
+              </Button>
+            ) : null}
+            {post.id !== "new" && post.status !== "archived" ? (
+              <Button variant="outline" onClick={handleArchive} disabled={isSaving}>
+                Archive
+              </Button>
+            ) : null}
           </div>
         }
       />
 
       <div className="flex min-h-svh bg-white pt-48 xl:pt-20">
         <div className="flex-1">
+          <div className="mx-auto mt-6 w-full max-w-3xl px-6">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <label className="space-y-1">
+                <span className="text-xs font-medium uppercase text-gray-500">
+                  Slug
+                </span>
+                <Input
+                  value={slug}
+                  onChange={(event) => setSlug(event.target.value)}
+                  placeholder="post-slug"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-medium uppercase text-gray-500">
+                  Publication date
+                </span>
+                <Input
+                  type="datetime-local"
+                  value={publicationDate}
+                  onChange={(event) => setPublicationDate(event.target.value)}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2">
+                <span className="text-xs font-medium uppercase text-gray-500">
+                  Post outline
+                </span>
+                <Switch checked={showOutline} onCheckedChange={setShowOutline} />
+              </label>
+            </div>
+          </div>
           <FigureNodeViewProvider requestReplacement={requestImageReplacement}>
             <ProseMirror
               state={editorState}
@@ -350,7 +525,11 @@ const PostEditor = ({ post, savePost, uploadImage, images }: EditorProps) => {
                   setImageSheetIntent({ type: "insert" });
                 }}
               />
-              <ProseMirrorDoc className={longEditorClass} spellCheck />
+              <WritingFeedbackPopover
+                persistSuppression={persistWritingFeedbackSuppression}
+                persistDictionaryWord={persistWritingFeedbackDictionaryWord}
+              />
+              <ProseMirrorDoc className={longEditorClass} spellCheck={false} />
             </ProseMirror>
           </FigureNodeViewProvider>
         </div>

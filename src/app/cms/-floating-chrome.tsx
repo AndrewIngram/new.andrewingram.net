@@ -17,11 +17,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type CmsCollection = "posts" | "images";
+type CmsCollection = "posts" | "images" | "writingFeedback";
 
 const collectionLabels: Record<CmsCollection, string> = {
   posts: "Posts",
   images: "Images",
+  writingFeedback: "Writing feedback",
+};
+
+const collectionLinks: Record<CmsCollection, "/cms/posts" | "/cms/images" | "/cms/writing-feedback"> = {
+  posts: "/cms/posts",
+  images: "/cms/images",
+  writingFeedback: "/cms/writing-feedback",
 };
 
 type CmsFloatingChromeProps = {
@@ -43,9 +50,7 @@ export function CmsFloatingChrome({
             <BreadcrumbItem>
               <BreadcrumbLink
                 render={
-                  <Link
-                    to={collection === "posts" ? "/cms/posts" : "/cms/images"}
-                  />
+                  <Link to={collectionLinks[collection]} />
                 }
               >
                 {collectionLabels[collection]}
@@ -68,6 +73,9 @@ export function CmsFloatingChrome({
                   </DropdownMenuItem>
                   <DropdownMenuItem render={<Link to="/cms/images" />}>
                     Images
+                  </DropdownMenuItem>
+                  <DropdownMenuItem render={<Link to="/cms/writing-feedback" />}>
+                    Writing feedback
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

@@ -1,12 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { env } from "@/env";
 import { AppRuntime } from "@/lib/runtime";
 import { getImageObjectById, transformImageObject } from "@/lib/images";
 import {
   canTransformImage,
   imageRenditionCacheUrl,
+  imageRenditionObjectCacheKey,
+  type ImageRenditionCacheMode,
+  matchImageRenditionCache,
   negotiateImageFormat,
+  openImageRenditionCache,
   parseImageRendition,
+  putImageRenditionCache,
 } from "@/lib/image-delivery";
 
 const originalResponse = (
@@ -22,6 +28,50 @@ const originalResponse = (
   });
   object.writeHttpMetadata(headers);
   return new Response(object.body, { headers });
+};
+
+const withImageRenditionCacheHeaders = (
+  response: Response,
+  status: "hit" | "miss",
+  mode: ImageRenditionCacheMode | "none",
+) => {
+  const headers = new Headers(response.headers);
+  headers.set("X-Image-Rendition-Cache", status);
+  headers.set("X-Image-Rendition-Cache-Mode", mode);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+};
+
+const devRenditionCacheResponse = async (key: string) => {
+  if (!import.meta.env.DEV) return null;
+
+  try {
+    const object = await env.IMAGES.get(key);
+    if (!object) return null;
+
+    const headers = new Headers({
+      "Content-Length": String(object.size),
+      "Cache-Control": "public, max-age=31536000, immutable",
+      Vary: "Accept",
+    });
+    object.writeHttpMetadata(headers);
+    return new Response(object.body, { headers });
+  } catch {
+    return null;
+  }
+};
+
+const putDevRenditionCache = async (key: string, response: Response) => {
+  if (!import.meta.env.DEV) return;
+
+  try {
+    const contentType = response.headers.get("Content-Type");
+    const options = contentType ? { httpMetadata: { contentType } } : undefined;
+    await env.IMAGES.put(key, await response.arrayBuffer(), options);
+  } catch {}
 };
 
 const loadImage = (id: string) => AppRuntime.runPromise(getImageObjectById(id));
@@ -51,13 +101,27 @@ export const Route = createFileRoute("/images/$id")({
           }
 
           const outputFormat = negotiateImageFormat(request.headers.get("Accept"), image.mimeType);
-          try {
-            const cacheUrl = imageRenditionCacheUrl(url, outputFormat);
-            const cacheKey = new Request(cacheUrl, { method: "GET" });
-            const cache = await caches.open("image-renditions");
-            const cached = await cache.match(cacheKey);
-            if (cached) return cached;
+          const cacheUrl = imageRenditionCacheUrl(url, outputFormat);
+          const cacheKey = new Request(cacheUrl, { method: "GET" });
+          const cache = await openImageRenditionCache(undefined, {
+            memoryFallback: import.meta.env.DEV,
+          });
+          const cached = await matchImageRenditionCache(cache, cacheKey);
+          if (cached) {
+            return withImageRenditionCacheHeaders(cached, "hit", cache?.mode ?? "none");
+          }
+          const devCacheKey = imageRenditionObjectCacheKey(
+            params.id,
+            object.etag,
+            width,
+            outputFormat,
+          );
+          const devCached = await devRenditionCacheResponse(devCacheKey);
+          if (devCached) {
+            return withImageRenditionCacheHeaders(devCached, "hit", "local-r2");
+          }
 
+          try {
             const response = await AppRuntime.runPromise(
               transformImageObject(object, width, outputFormat),
             );
@@ -65,11 +129,14 @@ export const Route = createFileRoute("/images/$id")({
             const headers = new Headers(response.headers);
             headers.set("Cache-Control", "public, max-age=31536000, immutable");
             headers.set("Vary", "Accept");
+            headers.set("X-Image-Rendition-Cache", "miss");
+            headers.set("X-Image-Rendition-Cache-Mode", cache?.mode ?? "none");
             const rendition = new Response(response.body, {
               status: response.status,
               headers,
             });
-            await cache.put(cacheKey, rendition.clone());
+            await putImageRenditionCache(cache, cacheKey, rendition.clone());
+            await putDevRenditionCache(devCacheKey, rendition.clone());
             return rendition;
           } catch (error) {
             console.error("[image.transform] failed", {

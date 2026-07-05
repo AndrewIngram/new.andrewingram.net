@@ -21,7 +21,11 @@ import {
   string,
   text,
 } from "./prosemirror-content";
-import type { ContentOf, NodeUnionOf, StandardSchemaV1 } from "./prosemirror-content";
+import type {
+  ContentOf,
+  NodeUnionOf,
+  StandardSchemaV1,
+} from "./prosemirror-content";
 import {
   DEFAULT_CODE_LANGUAGE,
   isSupportedCodeLanguage,
@@ -43,7 +47,11 @@ const codeLanguage = () =>
   custom<SupportedCodeLanguageId>((value) =>
     isSupportedCodeLanguage(value)
       ? { value }
-      : { issues: [{ message: `Unsupported code language: ${String(value ?? "")}` }] },
+      : {
+          issues: [
+            { message: `Unsupported code language: ${String(value ?? "")}` },
+          ],
+        },
   );
 
 const highlightRange = () =>
@@ -55,7 +63,9 @@ const highlightRange = () =>
     const from = Number(range.from);
     const to = Number(range.to);
     if (!Number.isFinite(from) || !Number.isFinite(to)) {
-      return { issues: [{ message: "Expected numeric highlighted line range" }] };
+      return {
+        issues: [{ message: "Expected numeric highlighted line range" }],
+      };
     }
     return { value: { from, to } };
   });
@@ -103,7 +113,9 @@ export const postContent = defineProseMirrorContent({
         {
           tag: "a[href]",
           getAttrs: (node: Node) =>
-            node instanceof HTMLAnchorElement ? { href: node.getAttribute("href") ?? "" } : false,
+            node instanceof HTMLAnchorElement
+              ? { href: node.getAttribute("href") ?? "" }
+              : false,
         },
       ],
     }),

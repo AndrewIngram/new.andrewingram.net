@@ -179,7 +179,52 @@ body {
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    background-color: #f1efe8;
     position: relative;
+  }
+}
+
+.writing-feedback {
+  position: relative;
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.18em;
+}
+
+.writing-feedback-spelling {
+  text-decoration-color: oklch(0.577 0.245 27.325);
+}
+
+.writing-feedback-grammar {
+  text-decoration-color: oklch(0.56 0.18 253);
+}
+
+.writing-feedback-active.writing-feedback-spelling {
+  background-color: oklch(0.971 0.013 17.38);
+}
+
+.writing-feedback-active.writing-feedback-grammar {
+  background-color: oklch(0.96 0.026 255);
+}
+
+.writing-feedback-popover {
+  top: var(--writing-feedback-popover-top);
+  left: var(--writing-feedback-popover-left);
+  width: max-content;
+  max-width: min(24rem, calc(100vw - 2rem));
+  overflow-wrap: anywhere;
+  transform: translate(-50%, calc(-100% - 0.5rem));
+}
+
+@supports (position-anchor: --writing-feedback) {
+  .writing-feedback-popover {
+    position-anchor: var(--writing-feedback-popover-anchor);
+    position-area: top center;
+    position-try-fallbacks: flip-block, flip-inline;
+    position-visibility: anchors-visible;
+    inset: auto;
+    margin: 0 0 0.5rem;
+    transform: none;
   }
 }

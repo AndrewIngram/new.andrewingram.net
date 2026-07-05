@@ -25,6 +25,18 @@ export const imageBucket = Effect.gen(function* () {
 
 export const imageTransformer = Cloudflare.Images({ name: "IMAGE_TRANSFORMER" });
 
+const debugAuth = Effect.gen(function* () {
+  const getCloudflareEnv = yield* Cloudflare.CloudflareEnvironment;
+  const cloudflareEnv = yield* getCloudflareEnv;
+
+  return {
+    type: cloudflareEnv.type,
+    source: cloudflareEnv.source,
+    expiresAt: cloudflareEnv.type === "oauth" ? cloudflareEnv.expires : undefined,
+    startedAt: Date.now(),
+  };
+});
+
 export const Website = Cloudflare.Vite("website", {
   compatibility: {
     date: "2026-04-30",
@@ -47,6 +59,7 @@ export const DebugWorker = Cloudflare.Worker("debug-worker", {
     DB: db,
     IMAGES: imageBucket,
     IMAGE_TRANSFORMER: imageTransformer,
+    DEBUG_AUTH: debugAuth,
   },
 });
 

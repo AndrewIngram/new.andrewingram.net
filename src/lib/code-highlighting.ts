@@ -12,6 +12,7 @@ import {
   lineIsHighlighted,
   migrateCodeBlockLanguageHints,
 } from "./code-blocks";
+import { preparePostOutlineContent } from "./post-outline";
 import type { PreparedPostContent } from "./post-content-schema";
 import type { JSONContent, JSONValue } from "./post-content-json";
 
@@ -82,4 +83,6 @@ const prepareMigratedPostContentForRender = async (
 };
 
 export const preparePostContentForRender = async (content: JSONContent) =>
-  prepareMigratedPostContentForRender(migrateCodeBlockLanguageHints(content));
+  prepareMigratedPostContentForRender(
+    preparePostOutlineContent(migrateCodeBlockLanguageHints(content)),
+  );

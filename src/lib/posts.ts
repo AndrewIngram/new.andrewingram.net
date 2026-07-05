@@ -1,30 +1,54 @@
 import { Data, Effect } from "effect";
 import * as Schema from "effect/Schema";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, ne, or } from "drizzle-orm";
 import slugify from "slugify";
 import { DB, type AppDb } from "@/db/db";
-import { posts } from "@/db/schema";
+import { postSlugRedirects, posts } from "@/db/schema";
 import { RecordNotFound } from "./errors";
 import { PostContentSchema, type PostContent } from "./post-content-schema";
 import type { JSONContent } from "./post-content-json";
 
-const PostStatusSchema = Schema.Literals(["draft", "published", "archived"]);
-const PostSchema = Schema.Struct({
-  id: Schema.String,
-  slug: Schema.String,
-  title: Schema.String,
-  status: PostStatusSchema,
-  content: Schema.Unknown,
-  createdAt: Schema.String,
-  updatedAt: Schema.String,
-  publishedAt: Schema.optional(Schema.String),
-});
+const PostStatusSchema = Schema.Literals([
+  "draft",
+  "published",
+  "unpublished",
+  "archived",
+]);
 
-type PostFromSchema = Schema.Schema.Type<typeof PostSchema>;
 export type PostStatus = Schema.Schema.Type<typeof PostStatusSchema>;
-export type Post = Omit<PostFromSchema, "content"> & {
+
+export type Post = {
+  id: string;
+  slug: string;
+  title: string;
+  status: PostStatus;
   content: PostContent;
+  createdAt: string;
+  updatedAt: string;
+  draftUpdatedAt: string;
+  publishedAt?: string | undefined;
+  lastPublishedAt?: string | undefined;
+  publishedSlug?: string | undefined;
+  publishedTitle?: string | undefined;
+  hasPublishedVersion: boolean;
+  hasDraftChanges: boolean;
+  showOutline: boolean;
+};
+
+export type PublicPost = {
+  id: string;
+  slug: string;
+  title: string;
+  content: PostContent;
+  publishedAt: string;
+  lastPublishedAt: string;
+  showOutline: boolean;
+};
+
+export type PublishedPostLookup = {
+  post: PublicPost;
+  redirectTo?: string | undefined;
 };
 
 export class PostsLoadAllError extends Data.TaggedError("PostsLoadAllError")<{
@@ -41,6 +65,10 @@ export class PostsSaveError extends Data.TaggedError("PostsSaveError")<{
   cause: unknown;
 }> {}
 
+export class SlugConflict extends Data.TaggedError("SlugConflict")<{
+  slug: string;
+}> {}
+
 export class PostsBackfillError extends Data.TaggedError("PostsBackfillError")<{
   cause: unknown;
 }> {}
@@ -53,6 +81,9 @@ const defaultContent: PostContent = {
 const postModelName = "posts";
 
 const toIsoString = (value: Date) => value.toISOString();
+
+const toOptionalIsoString = (value: Date | null) =>
+  value ? value.toISOString() : undefined;
 
 const toStatus = (value: typeof posts.$inferSelect.status) => value ?? "draft";
 
@@ -104,48 +135,171 @@ const parseMutableContent = (value: unknown): JSONContent => {
 
 type PostRow = typeof posts.$inferSelect;
 
-const getBaseSlug = (title: string) =>
-  slugify(title, { lower: true, strict: true, trim: true }) || "post";
+const getBaseSlug = (value: string) =>
+  slugify(value, { lower: true, strict: true, trim: true }) || "post";
 
-const getUniqueSlug = (db: AppDb, title: string, excludeId?: string | null) =>
+const normalizeSlug = (slug: string | undefined, title: string) =>
+  getBaseSlug(slug?.trim() || title);
+
+const parsePublicationDate = (value: string | undefined, fallback: Date) => {
+  if (!value) return fallback;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? fallback : date;
+};
+
+const sameContent = (left: unknown, right: unknown) =>
+  JSON.stringify(left) === JSON.stringify(right);
+
+const hasDraftChanges = (row: PostRow) => {
+  if (!row.publishedSlug || !row.publishedTitle || !row.publishedContent) {
+    return true;
+  }
+  return (
+    row.draftSlug !== row.publishedSlug ||
+    row.draftTitle !== row.publishedTitle ||
+    row.draftShowOutline !== row.publishedShowOutline ||
+    !sameContent(row.draftContent, row.publishedContent)
+  );
+};
+
+const toPost = (row: PostRow): Post => ({
+  id: row.id ?? "",
+  slug: row.draftSlug,
+  title: row.draftTitle,
+  status: toStatus(row.status),
+  content: parseContent(row.draftContent, row.draftTitle),
+  createdAt: toIsoString(row.createdAt ?? new Date(0)),
+  updatedAt: toIsoString(row.updatedAt ?? new Date(0)),
+  draftUpdatedAt: toIsoString(row.draftUpdatedAt ?? new Date(0)),
+  publishedAt: toOptionalIsoString(row.publishedAt),
+  lastPublishedAt: toOptionalIsoString(row.lastPublishedAt),
+  publishedSlug: row.publishedSlug ?? undefined,
+  publishedTitle: row.publishedTitle ?? undefined,
+  hasPublishedVersion: Boolean(row.publishedSlug && row.publishedContent),
+  hasDraftChanges: hasDraftChanges(row),
+  showOutline: row.draftShowOutline,
+});
+
+const toPublicPost = (row: PostRow): PublicPost | null => {
+  if (
+    row.status !== "published" ||
+    !row.publishedSlug ||
+    !row.publishedTitle ||
+    !row.publishedContent ||
+    !row.publishedAt ||
+    !row.lastPublishedAt
+  ) {
+    return null;
+  }
+
+  return {
+    id: row.id ?? "",
+    slug: row.publishedSlug,
+    title: row.publishedTitle,
+    content: parseContent(row.publishedContent, row.publishedTitle),
+    publishedAt: toIsoString(row.publishedAt),
+    lastPublishedAt: toIsoString(row.lastPublishedAt),
+    showOutline: row.publishedShowOutline,
+  };
+};
+
+const recordNotFound = (id: string) =>
+  new RecordNotFound({ model: postModelName, id });
+
+type SlugOwner = { id: string | null; source: "post" | "redirect" };
+
+const findSlugOwner = (db: AppDb, slug: string) =>
+  Effect.gen(function* () {
+    const postRows = yield* db
+      .select({ id: posts.id })
+      .from(posts)
+      .where(or(eq(posts.draftSlug, slug), eq(posts.publishedSlug, slug)))
+      .limit(1);
+
+    if (postRows[0]) {
+      return { id: postRows[0].id, source: "post" } satisfies SlugOwner;
+    }
+
+    const redirectRows = yield* db
+      .select({ postId: postSlugRedirects.postId })
+      .from(postSlugRedirects)
+      .where(eq(postSlugRedirects.slug, slug))
+      .limit(1);
+
+    if (redirectRows[0]) {
+      return {
+        id: redirectRows[0].postId,
+        source: "redirect",
+      } satisfies SlugOwner;
+    }
+
+    return null;
+  });
+
+const ensureSlugAvailable = (db: AppDb, slug: string, postId: string | null) =>
+  Effect.gen(function* () {
+    const owner = yield* findSlugOwner(db, slug);
+    if (!owner || owner.id === postId) return;
+    return yield* Effect.fail(new SlugConflict({ slug }));
+  });
+
+const getUniqueSlug = (db: AppDb, title: string, postId: string | null) =>
   Effect.gen(function* () {
     const baseSlug = getBaseSlug(title);
     let suffix = 1;
 
     while (true) {
       const slug = suffix === 1 ? baseSlug : `${baseSlug}-${suffix}`;
-      const rows = yield* db
-        .select({ id: posts.id })
-        .from(posts)
-        .where(
-          excludeId
-            ? and(eq(posts.slug, slug), ne(posts.id, excludeId))
-            : eq(posts.slug, slug),
-        )
-        .limit(1);
-
-      if (rows.length === 0) return slug;
+      const owner = yield* findSlugOwner(db, slug);
+      if (!owner || owner.id === postId) return slug;
       suffix += 1;
     }
   });
 
-const toPost = (row: typeof posts.$inferSelect): Post => ({
-  id: row.id ?? "",
-  slug: row.slug ?? "",
-  title: row.title ?? "",
-  status: toStatus(row.status),
-  content: parseContent(row.content, row.title ?? ""),
-  createdAt: toIsoString(row.createdAt ?? new Date(0)),
-  updatedAt: toIsoString(row.updatedAt ?? new Date(0)),
-});
-
-const ensurePostSlug = (db: AppDb, row: PostRow) =>
+const getExistingPost = (db: AppDb, id: string) =>
   Effect.gen(function* () {
-    if (row.slug) return toPost(row);
-    const id = row.id ?? "";
-    const slug = yield* getUniqueSlug(db, row.title, id);
-    yield* db.update(posts).set({ slug }).where(eq(posts.id, id));
-    return toPost({ ...row, slug });
+    const rows = yield* db.select().from(posts).where(eq(posts.id, id)).limit(1);
+    const post = rows[0];
+    if (!post) {
+      return yield* Effect.fail(recordNotFound(id));
+    }
+    return post;
+  });
+
+const saveRedirect = (db: AppDb, slug: string, postId: string, now: Date) =>
+  Effect.gen(function* () {
+    const existing = yield* db
+      .select({ id: postSlugRedirects.id, postId: postSlugRedirects.postId })
+      .from(postSlugRedirects)
+      .where(eq(postSlugRedirects.slug, slug))
+      .limit(1);
+
+    if (existing[0]?.postId === postId) return;
+    if (existing[0]) return yield* Effect.fail(new SlugConflict({ slug }));
+
+    yield* db.insert(postSlugRedirects).values([
+      {
+        id: randomUUID(),
+        slug,
+        postId,
+        createdAt: now,
+      },
+    ]);
+  });
+
+const removeOwnRedirect = (db: AppDb, slug: string, postId: string) =>
+  Effect.gen(function* () {
+    const existing = yield* db
+      .select({ id: postSlugRedirects.id, postId: postSlugRedirects.postId })
+      .from(postSlugRedirects)
+      .where(eq(postSlugRedirects.slug, slug))
+      .limit(1);
+
+    if (existing[0]?.postId === postId) {
+      yield* db
+        .delete(postSlugRedirects)
+        .where(eq(postSlugRedirects.slug, slug));
+    }
   });
 
 export const createDraftPost = (): Post => {
@@ -158,26 +312,24 @@ export const createDraftPost = (): Post => {
     content: defaultContent,
     createdAt: now,
     updatedAt: now,
+    draftUpdatedAt: now,
+    hasPublishedVersion: false,
+    hasDraftChanges: true,
+    showOutline: false,
   };
 };
 
 type PostInput = {
   title: string;
-  status: PostStatus;
+  slug?: string | undefined;
   content: PostContent;
+  showOutline: boolean;
   publishedAt?: string | undefined;
 };
 
-export type CreatePostInput = PostInput;
-export type UpdatePostInput = PostInput & {
-  id: string;
-};
 export type SavePostInput = PostInput & {
   id: string;
 };
-
-const recordNotFound = (id: string) =>
-  new RecordNotFound({ model: postModelName, id });
 
 export const getAllPosts = () =>
   Effect.gen(function* () {
@@ -185,23 +337,30 @@ export const getAllPosts = () =>
     const rows: ReadonlyArray<PostRow> = yield* db
       .select()
       .from(posts)
+      .where(ne(posts.status, "archived"))
       .orderBy(desc(posts.updatedAt));
-    return yield* Effect.all(rows.map((row) => ensurePostSlug(db, row)));
+    return rows.map(toPost);
+  }).pipe(Effect.mapError((cause) => new PostsLoadAllError({ cause })));
+
+export const getPublishedPosts = () =>
+  Effect.gen(function* () {
+    const db = yield* Effect.service(DB);
+    const rows: ReadonlyArray<PostRow> = yield* db
+      .select()
+      .from(posts)
+      .where(eq(posts.status, "published"))
+      .orderBy(desc(posts.publishedAt));
+    return rows.flatMap((row) => {
+      const post = toPublicPost(row);
+      return post ? [post] : [];
+    });
   }).pipe(Effect.mapError((cause) => new PostsLoadAllError({ cause })));
 
 export const getPostById = (id: string) =>
   Effect.gen(function* () {
     const db = yield* Effect.service(DB);
-    const rows = yield* db
-      .select()
-      .from(posts)
-      .where(eq(posts.id, id))
-      .limit(1);
-    const post = rows[0];
-    if (!post) {
-      return yield* Effect.fail(recordNotFound(id));
-    }
-    return yield* ensurePostSlug(db, post);
+    const post = yield* getExistingPost(db, id);
+    return toPost(post);
   }).pipe(
     Effect.mapError((cause) =>
       cause instanceof RecordNotFound
@@ -210,78 +369,230 @@ export const getPostById = (id: string) =>
     ),
   );
 
-export const createPost = (input: CreatePostInput) => {
-  const id = randomUUID();
+export const savePostDraft = (input: SavePostInput) => {
+  const id = input.id === "new" ? randomUUID() : input.id;
 
   return Effect.gen(function* () {
     const db = yield* Effect.service(DB);
     const now = new Date();
-    const slug = yield* getUniqueSlug(db, input.title);
-    yield* db.insert(posts).values([
-      {
-        id,
-        slug,
-        title: input.title.trim(),
-        status: input.status,
-        content: input.content,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ]);
-    return { id };
-  }).pipe(Effect.mapError((cause) => new PostsSaveError({ id, cause })));
-};
+    const title = input.title.trim();
+    const slug = input.slug
+      ? normalizeSlug(input.slug, title)
+      : yield* getUniqueSlug(db, title, input.id === "new" ? null : id);
 
-export const updatePost = (input: UpdatePostInput) =>
-  Effect.gen(function* () {
-    const db = yield* Effect.service(DB);
-    const now = new Date();
-    const existing = yield* db
-      .select()
-      .from(posts)
-      .where(eq(posts.id, input.id))
-      .limit(1);
+    yield* ensureSlugAvailable(db, slug, input.id === "new" ? null : id);
 
-    if (!existing[0]) {
-      return yield* Effect.fail(recordNotFound(input.id));
+    if (input.id === "new") {
+      yield* db.insert(posts).values([
+        {
+          id,
+          status: "draft",
+          draftSlug: slug,
+          draftTitle: title,
+          draftContent: input.content,
+          draftShowOutline: input.showOutline,
+          draftUpdatedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ]);
+      return { id };
     }
 
-    const slug =
-      existing[0].slug ?? (yield* getUniqueSlug(db, input.title, input.id));
-
+    yield* getExistingPost(db, id);
     yield* db
       .update(posts)
       .set({
-        slug,
-        title: input.title.trim(),
-        status: input.status,
-        content: input.content,
+        draftSlug: slug,
+        draftTitle: title,
+        draftContent: input.content,
+        draftShowOutline: input.showOutline,
+        draftUpdatedAt: now,
         updatedAt: now,
       })
-      .where(eq(posts.id, input.id));
+      .where(eq(posts.id, id));
 
-    return { id: input.id };
+    return { id };
   }).pipe(
     Effect.mapError((cause) =>
       cause instanceof RecordNotFound
         ? cause
-        : new PostsSaveError({ id: input.id, cause }),
+        : new PostsSaveError({ id, cause }),
+    ),
+  );
+};
+
+export const publishPost = (input: SavePostInput) => {
+  const id = input.id === "new" ? randomUUID() : input.id;
+
+  return Effect.gen(function* () {
+    const db = yield* Effect.service(DB);
+    const now = new Date();
+    const title = input.title.trim();
+    const slug = input.slug
+      ? normalizeSlug(input.slug, title)
+      : yield* getUniqueSlug(db, title, input.id === "new" ? null : id);
+
+    yield* ensureSlugAvailable(db, slug, input.id === "new" ? null : id);
+
+    if (input.id === "new") {
+      const publishedAt = parsePublicationDate(input.publishedAt, now);
+      yield* db.insert(posts).values([
+        {
+          id,
+          status: "published",
+          draftSlug: slug,
+          draftTitle: title,
+          draftContent: input.content,
+          draftShowOutline: input.showOutline,
+          draftUpdatedAt: now,
+          publishedSlug: slug,
+          publishedTitle: title,
+          publishedContent: input.content,
+          publishedShowOutline: input.showOutline,
+          publishedAt,
+          lastPublishedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ]);
+      return { id };
+    }
+
+    const existing = yield* getExistingPost(db, id);
+    const publishedAt = parsePublicationDate(
+      input.publishedAt,
+      existing.publishedAt ?? now,
+    );
+    if (existing.publishedSlug && existing.publishedSlug !== slug) {
+      yield* saveRedirect(db, existing.publishedSlug, id, now);
+    }
+    yield* removeOwnRedirect(db, slug, id);
+
+    yield* db
+      .update(posts)
+      .set({
+        status: "published",
+        draftSlug: slug,
+        draftTitle: title,
+        draftContent: input.content,
+        draftShowOutline: input.showOutline,
+        draftUpdatedAt: now,
+        publishedSlug: slug,
+        publishedTitle: title,
+        publishedContent: input.content,
+        publishedShowOutline: input.showOutline,
+        publishedAt,
+        lastPublishedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(posts.id, id));
+
+    return { id };
+  }).pipe(
+    Effect.mapError((cause) =>
+      cause instanceof RecordNotFound
+        ? cause
+        : new PostsSaveError({ id, cause }),
+    ),
+  );
+};
+
+export const unpublishPost = (id: string) =>
+  Effect.gen(function* () {
+    const db = yield* Effect.service(DB);
+    const existing = yield* getExistingPost(db, id);
+    if (!existing.publishedSlug) {
+      return yield* Effect.fail(recordNotFound(id));
+    }
+    yield* db
+      .update(posts)
+      .set({ status: "unpublished", updatedAt: new Date() })
+      .where(eq(posts.id, id));
+    return { id };
+  }).pipe(
+    Effect.mapError((cause) =>
+      cause instanceof RecordNotFound ? cause : new PostsSaveError({ id, cause }),
     ),
   );
 
-export const getPostBySlug = (slug: string) =>
+export const archivePost = (id: string) =>
+  Effect.gen(function* () {
+    const db = yield* Effect.service(DB);
+    yield* getExistingPost(db, id);
+    yield* db
+      .update(posts)
+      .set({ status: "archived", updatedAt: new Date() })
+      .where(eq(posts.id, id));
+    return { id };
+  }).pipe(
+    Effect.mapError((cause) =>
+      cause instanceof RecordNotFound ? cause : new PostsSaveError({ id, cause }),
+    ),
+  );
+
+export const discardPostDraft = (id: string) =>
+  Effect.gen(function* () {
+    const db = yield* Effect.service(DB);
+    const existing = yield* getExistingPost(db, id);
+    if (
+      !existing.publishedSlug ||
+      !existing.publishedTitle ||
+      !existing.publishedContent
+    ) {
+      return yield* Effect.fail(recordNotFound(id));
+    }
+
+    const now = new Date();
+    yield* db
+      .update(posts)
+      .set({
+        draftSlug: existing.publishedSlug,
+        draftTitle: existing.publishedTitle,
+        draftContent: existing.publishedContent,
+        draftShowOutline: existing.publishedShowOutline,
+        draftUpdatedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(posts.id, id));
+    return { id };
+  }).pipe(
+    Effect.mapError((cause) =>
+      cause instanceof RecordNotFound ? cause : new PostsSaveError({ id, cause }),
+    ),
+  );
+
+export const getPublishedPostBySlug = (slug: string) =>
   Effect.gen(function* () {
     const db = yield* Effect.service(DB);
     const rows = yield* db
       .select()
       .from(posts)
-      .where(eq(posts.slug, slug))
+      .where(and(eq(posts.status, "published"), eq(posts.publishedSlug, slug)))
       .limit(1);
-    const post = rows[0];
-    if (!post) {
-      return yield* Effect.fail(recordNotFound(slug));
-    }
-    return toPost(post);
+    const directPost = rows[0] ? toPublicPost(rows[0]) : null;
+    if (directPost) return { post: directPost } satisfies PublishedPostLookup;
+
+    const redirectRows = yield* db
+      .select({ postId: postSlugRedirects.postId })
+      .from(postSlugRedirects)
+      .where(eq(postSlugRedirects.slug, slug))
+      .limit(1);
+    const redirect = redirectRows[0];
+    if (!redirect) return yield* Effect.fail(recordNotFound(slug));
+
+    const targetRows = yield* db
+      .select()
+      .from(posts)
+      .where(and(eq(posts.id, redirect.postId), eq(posts.status, "published")))
+      .limit(1);
+    const targetPost = targetRows[0] ? toPublicPost(targetRows[0]) : null;
+    if (!targetPost) return yield* Effect.fail(recordNotFound(slug));
+
+    return {
+      post: targetPost,
+      redirectTo: targetPost.slug,
+    } satisfies PublishedPostLookup;
   }).pipe(
     Effect.mapError((cause) =>
       cause instanceof RecordNotFound
@@ -336,15 +647,24 @@ export const backfillPostImageDimensions = (dimensions: ImageDimensions) =>
     yield* Effect.forEach(
       rows,
       (row) => {
-        const result = addPostImageDimensions(
-          parseMutableContent(row.content),
+        const draftResult = addPostImageDimensions(
+          parseMutableContent(row.draftContent),
           dimensions,
         );
-        if (!result.changed || !row.id) return Effect.void;
+        const publishedResult = row.publishedContent
+          ? addPostImageDimensions(parseMutableContent(row.publishedContent), dimensions)
+          : null;
+        const changed = draftResult.changed || Boolean(publishedResult?.changed);
+        if (!changed || !row.id) return Effect.void;
         updated += 1;
         return db
           .update(posts)
-          .set({ content: result.content })
+          .set({
+            draftContent: draftResult.content,
+            ...(publishedResult?.changed
+              ? { publishedContent: publishedResult.content }
+              : {}),
+          })
           .where(eq(posts.id, row.id!));
       },
       { concurrency: 1 },

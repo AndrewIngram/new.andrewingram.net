@@ -24,5 +24,20 @@ export const columns: ColumnDef<Post>[] = [
   {
     accessorKey: "status",
     header: "Status",
+    cell(props) {
+      const post = props.row.original;
+      return (
+        <span>
+          {post.status}
+          {post.hasDraftChanges && post.hasPublishedVersion
+            ? " + draft changes"
+            : ""}
+        </span>
+      );
+    },
+  },
+  {
+    accessorKey: "slug",
+    header: "Draft slug",
   },
 ];

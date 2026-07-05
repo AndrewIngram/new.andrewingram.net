@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { preparePostContentForRender } from "./code-highlighting";
+import type { JSONContent } from "./post-content-json";
 
 describe("code highlighting", () => {
   it("attaches Shiki HTML with line numbers and highlighted rows", async () => {
@@ -37,5 +38,24 @@ describe("code highlighting", () => {
         content: [{ type: "text", text: "x" }],
       }),
     ).rejects.toThrow("Unsupported code language");
+  });
+
+  it("adds heading ids without mutating the source content", async () => {
+    const source: JSONContent = {
+      type: "doc",
+      content: [
+        { type: "title", content: [{ type: "text", text: "Post" }] },
+        {
+          type: "heading",
+          attrs: { level: 2 },
+          content: [{ type: "text", text: "Intro" }],
+        },
+      ],
+    };
+
+    const content = await preparePostContentForRender(source);
+
+    expect(content.content?.[1]?.attrs?.id).toBe("intro");
+    expect(source.content?.[1]?.attrs?.id).toBeUndefined();
   });
 });

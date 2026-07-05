@@ -13,6 +13,7 @@ import {
 import { Decoration, DecorationSet } from "prosemirror-view";
 import { editorKeymap, historyPlugin } from "./commands";
 import { postSchema } from "./schema";
+import { createWritingFeedbackPlugin, type WritingFeedbackPluginOptions } from "./writing-feedback";
 
 const hasMeaningfulBody = (doc: ProseMirrorNode) => {
   let meaningful = false;
@@ -269,14 +270,21 @@ export const scopedSelectAllKeymap = keymap({
   "Mod-a": scopedSelectAll,
 });
 
-export const editorPlugins = [
+export type EditorPluginsOptions = {
+  writingFeedback?: WritingFeedbackPluginOptions;
+};
+
+export const createEditorPlugins = ({ writingFeedback }: EditorPluginsOptions = {}) => [
   inputRulePlugin,
   scopedSelectAllPlugin,
   slashCommandPlugin,
   formattingToolbarAnchorPlugin,
+  createWritingFeedbackPlugin(writingFeedback),
   historyPlugin,
   placeholderPlugin,
   reactKeys(),
 ];
+
+export const editorPlugins = createEditorPlugins();
 
 export const externalPlugins = [scopedSelectAllKeymap, editorKeymap];

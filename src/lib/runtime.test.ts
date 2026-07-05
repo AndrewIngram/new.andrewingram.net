@@ -1,6 +1,8 @@
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/env", () => ({ env: { DB: {} } }));
+
 import { runMutation } from "./runtime";
 
 describe("runMutation", () => {

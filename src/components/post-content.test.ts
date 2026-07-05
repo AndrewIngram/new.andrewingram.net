@@ -68,4 +68,25 @@ describe("PostContent", () => {
     expect(html).toContain('data-line="1"');
     expect(html).toContain("is-highlighted");
   });
+
+  it("renders prepared heading ids", () => {
+    const html = renderToStaticMarkup(
+      createElement(PostContent, {
+        content: {
+          type: "doc",
+          content: [
+            { type: "title", content: [{ type: "text", text: "Post" }] },
+            {
+              type: "heading",
+              attrs: { level: 2, id: "section" },
+              content: [{ type: "text", text: "Section" }],
+            },
+          ],
+        },
+        skipTitle: true,
+      }),
+    );
+
+    expect(html).toContain('<h2 id="section">Section</h2>');
+  });
 });

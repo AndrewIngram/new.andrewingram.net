@@ -13,6 +13,23 @@ import {
   slashCommandPluginKey,
 } from "./plugins";
 import { postSchema } from "./schema";
+import {
+  HARPER_BRITISH_DICTIONARY,
+  addWritingFeedbackIssueToDictionary,
+  applyWritingFeedbackSuggestion,
+  createWritingFeedbackDecorations,
+  createWritingFeedbackIssues,
+  createWritingFeedbackPlugin,
+  dictionaryWordKey,
+  dismissWritingFeedback,
+  mapWritingFeedbackSpan,
+  projectWritingFeedbackText,
+  suppressWritingFeedbackIssue,
+  toWritingFeedbackSuggestion,
+  writingFeedbackPatternKey,
+  writingFeedbackKind,
+  writingFeedbackPluginKey,
+} from "./writing-feedback";
 
 const createState = () =>
   EditorState.create({
@@ -260,6 +277,13 @@ const slashDecorations = (state: EditorState) => {
   return decorationSet?.find() ?? [];
 };
 
+const decorationAttrs = (decoration: unknown) =>
+  (
+    decoration as unknown as {
+      type: { attrs: Record<string, string> };
+    }
+  ).type.attrs;
+
 describe("slash command plugin", () => {
   it("does not open from existing slash text", () => {
     const state = createSlashState(
@@ -441,5 +465,532 @@ describe("slash command plugin", () => {
     expect(slashCommandPluginKey.getState(result.state)?.active).toMatchObject({
       query: "",
     });
+  });
+});
+
+const createWritingFeedbackState = (plugins = [createWritingFeedbackPlugin()]) =>
+  EditorState.create({
+    schema: postSchema,
+    doc: postSchema.nodeFromJSON({
+      type: "doc",
+      content: [
+        { type: "title", content: [{ type: "text", text: "Ignored title" }] },
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "Body " },
+            {
+              type: "text",
+              text: "inline code",
+              marks: [{ type: "code" }],
+            },
+            { type: "text", text: " text" },
+          ],
+        },
+        { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Heading" }] },
+        {
+          type: "blockquote",
+          content: [
+            { type: "paragraph", content: [{ type: "text", text: "Quoted" }] },
+          ],
+        },
+        {
+          type: "bulletList",
+          content: [
+            {
+              type: "listItem",
+              content: [
+                { type: "paragraph", content: [{ type: "text", text: "List item" }] },
+              ],
+            },
+          ],
+        },
+        {
+          type: "codeBlock",
+          attrs: { language: "typescript", highlightRanges: [] },
+          content: [{ type: "text", text: "const bad = true;" }],
+        },
+        {
+          type: "figure",
+          content: [
+            { type: "image", attrs: { src: "/images/1", alt: "" } },
+            { type: "figcaption", content: [{ type: "text", text: "Caption" }] },
+          ],
+        },
+      ],
+    }),
+    plugins,
+  });
+
+const writingFeedbackDecorations = (state: EditorState) =>
+  writingFeedbackPluginKey.getState(state)?.decorations.find() ?? [];
+
+const writingFeedbackIssues = (state: EditorState) =>
+  writingFeedbackPluginKey.getState(state)?.issues ?? [];
+
+const createWritingFeedbackIssue = (
+  state: EditorState,
+  lint: Parameters<typeof createWritingFeedbackIssues>[1][number],
+) => {
+  const projection = projectWritingFeedbackText(state.doc);
+  const issue = createWritingFeedbackIssues(projection, [lint])[0];
+  if (!issue) throw new Error("Writing feedback issue not created");
+  return issue;
+};
+
+const applyWritingFeedbackIssues = (
+  state: EditorState,
+  issues: ReturnType<typeof createWritingFeedbackIssues>,
+  requestId = 1,
+) => {
+  const pending = state.apply(
+    state.tr.setMeta(writingFeedbackPluginKey, { type: "start", requestId }),
+  );
+  return pending.apply(
+    pending.tr.setMeta(writingFeedbackPluginKey, {
+      type: "finish",
+      requestId,
+      issues,
+    }),
+  );
+};
+
+const openWritingFeedbackIssue = (state: EditorState, issueId: string) =>
+  state.apply(
+    state.tr.setMeta(writingFeedbackPluginKey, { type: "open", issueId }),
+  );
+
+describe("writing feedback text projection", () => {
+  it("projects body prose and captions while excluding title, code blocks, and inline code", () => {
+    const state = createWritingFeedbackState([]);
+    const projection = projectWritingFeedbackText(state.doc);
+
+    expect(projection.text).toBe("Body  text\n\nHeading\n\nQuoted\n\nList item\n\nCaption");
+    expect(projection.text).not.toContain("Ignored title");
+    expect(projection.text).not.toContain("inline code");
+    expect(projection.text).not.toContain("const bad");
+  });
+
+  it("maps Harper spans back to ProseMirror positions", () => {
+    const state = createWritingFeedbackState([]);
+    const projection = projectWritingFeedbackText(state.doc);
+    const caption = textRange(state, "Caption");
+    const captionOffset = projection.text.indexOf("Caption");
+
+    expect(
+      mapWritingFeedbackSpan(projection, captionOffset, captionOffset + "Caption".length),
+    ).toEqual(caption);
+  });
+
+  it("classifies spelling and typo lints separately from grammar feedback", () => {
+    expect(writingFeedbackKind("Spelling")).toBe("spelling");
+    expect(writingFeedbackKind("Typo")).toBe("spelling");
+    expect(writingFeedbackKind("Grammar")).toBe("grammar");
+    expect(writingFeedbackKind("Style")).toBe("grammar");
+  });
+
+  it("keeps British dictionary additions for Harper gaps", () => {
+    expect(HARPER_BRITISH_DICTIONARY).toContain("customisable");
+  });
+
+  it("creates red spelling decorations and blue grammar decorations", () => {
+    const state = createWritingFeedbackState([]);
+    const projection = projectWritingFeedbackText(state.doc);
+    const bodyOffset = projection.text.indexOf("Body");
+    const headingOffset = projection.text.indexOf("Heading");
+    const issues = createWritingFeedbackIssues(projection, [
+      { from: bodyOffset, to: bodyOffset + 4, kind: "Spelling", message: "Spelling issue" },
+      {
+        from: headingOffset,
+        to: headingOffset + 7,
+        kind: "Grammar",
+        message: "Grammar issue",
+      },
+    ]);
+    const decorations = createWritingFeedbackDecorations(state.doc, issues).find();
+
+    expect(decorations).toHaveLength(2);
+    expect(decorationAttrs(decorations[0]!).class).toBe(
+      "writing-feedback writing-feedback-spelling",
+    );
+    expect(decorationAttrs(decorations[0]!)["data-writing-feedback-id"]).toBe(issues[0]?.id);
+    expect(decorationAttrs(decorations[0]!)["data-writing-feedback-kind"]).toBe("spelling");
+    expect(decorationAttrs(decorations[0]!)["data-writing-feedback-message"]).toBe(
+      "Spelling issue",
+    );
+    expect(decorationAttrs(decorations[0]!).style).toContain("anchor-name:");
+    expect(decorationAttrs(decorations[0]!).style).toContain("--writing-feedback-anchor:");
+    expect(decorationAttrs(decorations[0]!).title).toBeUndefined();
+    expect(decorationAttrs(decorations[1]!).class).toBe(
+      "writing-feedback writing-feedback-grammar",
+    );
+    expect(decorationAttrs(decorations[1]!)["data-writing-feedback-kind"]).toBe("grammar");
+    expect(decorationAttrs(decorations[1]!)["data-writing-feedback-message"]).toBe(
+      "Grammar issue",
+    );
+    expect(decorationAttrs(decorations[1]!).title).toBeUndefined();
+  });
+
+  it("marks the active decoration", () => {
+    const state = createWritingFeedbackState([]);
+    const issue = createWritingFeedbackIssue(state, {
+      from: 0,
+      to: 4,
+      kind: "Spelling",
+      message: "Spelling issue",
+    });
+    const decorations = createWritingFeedbackDecorations(state.doc, [issue], issue.id).find();
+
+    expect(decorationAttrs(decorations[0]!).class).toBe(
+      "writing-feedback writing-feedback-spelling writing-feedback-active",
+    );
+  });
+
+  it("serializes Harper suggestions", () => {
+    const suggestion = (kind: number, replacementText: string) => ({
+      kind: () => kind,
+      get_replacement_text: () => replacementText,
+    });
+
+    expect(toWritingFeedbackSuggestion(suggestion(0, "customisable"))).toEqual({
+      kind: "replace",
+      replacementText: "customisable",
+    });
+    expect(toWritingFeedbackSuggestion(suggestion(1, ""))).toEqual({
+      kind: "remove",
+      replacementText: "",
+    });
+    expect(toWritingFeedbackSuggestion(suggestion(2, ","))).toEqual({
+      kind: "insertAfter",
+      replacementText: ",",
+    });
+  });
+
+  it("normalizes dictionary words and global suppression patterns", () => {
+    expect(dictionaryWordKey(" “ProseMirror” ")).toBe("prosemirror");
+    expect(
+      writingFeedbackPatternKey({
+        rule: "Comparative Adjective",
+        kind: "Usage",
+        message:
+          'This is not an error, but an inflected form also exists: "completer".',
+        problemText: "more complete",
+        suggestions: [{ kind: "replace", replacementText: "completer" }],
+      }),
+    ).toBe(
+      "rule:comparative_adjective|kind:Usage|message:this is not an error but an inflected form also exists {term}|example:more complete|suggestions:replace",
+    );
+    expect(
+      writingFeedbackPatternKey({
+        rule: "Comparative Adjective",
+        kind: "Usage",
+        message:
+          'This is not an error, but an inflected form also exists: "completer".',
+        problemText: "most common",
+        suggestions: [{ kind: "replace", replacementText: "commonest" }],
+      }),
+    ).not.toBe(
+      writingFeedbackPatternKey({
+        rule: "Comparative Adjective",
+        kind: "Usage",
+        message:
+          'This is not an error, but an inflected form also exists: "completer".',
+        problemText: "more complete",
+        suggestions: [{ kind: "replace", replacementText: "completer" }],
+      }),
+    );
+  });
+
+  it("filters writing feedback by suppression and dictionary preferences", () => {
+    const state = createWritingFeedbackState([]);
+    const projection = projectWritingFeedbackText(state.doc);
+
+    expect(
+      createWritingFeedbackIssues(
+        projection,
+        [
+          {
+            from: 0,
+            to: 4,
+            kind: "Spelling",
+            message: "Spelling issue",
+            problemText: "ProseMirror",
+          },
+        ],
+        { globalDictionaryWords: ["ProseMirror"] },
+      ),
+    ).toHaveLength(0);
+    expect(
+      createWritingFeedbackIssues(
+        projection,
+        [
+          {
+            from: 0,
+            to: 4,
+            kind: "Grammar",
+            message: "Grammar issue",
+            contextHash: "post-hash",
+          },
+        ],
+        { postSuppressionKeys: ["post-hash"] },
+      ),
+    ).toHaveLength(0);
+    expect(
+      createWritingFeedbackIssues(
+        projection,
+        [
+          {
+            from: 0,
+            to: 4,
+            kind: "Usage",
+            message: "Usage issue",
+            patternKey: "global-pattern",
+          },
+        ],
+        { globalSuppressionKeys: ["global-pattern"] },
+      ),
+    ).toHaveLength(0);
+  });
+});
+
+describe("writing feedback plugin state", () => {
+  it("maps decorations through document edits while a new lint is pending", () => {
+    const state = createWritingFeedbackState();
+    const body = textRange(state, "Body ");
+    const issues = createWritingFeedbackIssues(projectWritingFeedbackText(state.doc), [
+      { from: 0, to: 4, kind: "Spelling", message: "Spelling issue" },
+    ]);
+    const decorated = applyWritingFeedbackIssues(state, issues);
+    const edited = decorated.apply(
+      decorated.tr
+        .insertText("New ", 1)
+        .setMeta(writingFeedbackPluginKey, { type: "start", requestId: 2 }),
+    );
+
+    const mapped = writingFeedbackDecorations(edited);
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0]?.from).toBe(body.from + 4);
+    expect(mapped[0]?.to).toBe(body.from + 8);
+  });
+
+  it("maps active writing feedback through document edits", () => {
+    const state = createWritingFeedbackState();
+    const issue = createWritingFeedbackIssue(state, {
+      from: 0,
+      to: 4,
+      kind: "Spelling",
+      message: "Spelling issue",
+    });
+    const decorated = openWritingFeedbackIssue(
+      applyWritingFeedbackIssues(state, [issue]),
+      issue.id,
+    );
+    const edited = decorated.apply(decorated.tr.insertText("New ", 1));
+
+    const pluginState = writingFeedbackPluginKey.getState(edited);
+    expect(pluginState?.activeId).toBe(issue.id);
+    expect(writingFeedbackDecorations(edited)[0]?.from).toBe(issue.from + 4);
+    expect(decorationAttrs(writingFeedbackDecorations(edited)[0]!).class).toContain(
+      "writing-feedback-active",
+    );
+  });
+
+  it("closes active writing feedback", () => {
+    const state = createWritingFeedbackState();
+    const issue = createWritingFeedbackIssue(state, {
+      from: 0,
+      to: 4,
+      kind: "Spelling",
+      message: "Spelling issue",
+    });
+    const opened = openWritingFeedbackIssue(applyWritingFeedbackIssues(state, [issue]), issue.id);
+    const transaction = dismissWritingFeedback(opened);
+
+    expect(transaction).not.toBe(null);
+    const closed = opened.apply(transaction!);
+    expect(writingFeedbackPluginKey.getState(closed)?.activeId).toBe(null);
+    expect(decorationAttrs(writingFeedbackDecorations(closed)[0]!).class).not.toContain(
+      "writing-feedback-active",
+    );
+  });
+
+  it("applies replacement, removal, and insertion suggestions", () => {
+    const cases = [
+      {
+        suggestion: { kind: "replace" as const, replacementText: "Copy" },
+        text: "Copy",
+      },
+      {
+        suggestion: { kind: "remove" as const, replacementText: "" },
+        text: "",
+      },
+      {
+        suggestion: { kind: "insertAfter" as const, replacementText: "," },
+        text: "Body,",
+      },
+    ];
+
+    for (const testCase of cases) {
+      const state = createWritingFeedbackState();
+      const issue = createWritingFeedbackIssue(state, {
+        from: 0,
+        to: 4,
+        kind: "Spelling",
+        message: "Spelling issue",
+        suggestions: [testCase.suggestion],
+      });
+      const opened = openWritingFeedbackIssue(applyWritingFeedbackIssues(state, [issue]), issue.id);
+      const transaction = applyWritingFeedbackSuggestion(opened, 0);
+
+      expect(transaction).not.toBe(null);
+      const applied = opened.apply(transaction!);
+      expect(applied.doc.textBetween(issue.from, issue.from + testCase.text.length)).toBe(
+        testCase.text,
+      );
+      expect(writingFeedbackPluginKey.getState(applied)?.activeId).toBe(null);
+      expect(writingFeedbackIssues(applied)).toHaveLength(0);
+      expect(writingFeedbackDecorations(applied)).toHaveLength(0);
+    }
+  });
+
+  it("suppresses active writing feedback in post and global scopes", () => {
+    const cases = [
+      { scope: "post" as const, stateKey: "postSuppressionKeys", value: "post-hash" },
+      { scope: "global" as const, stateKey: "globalSuppressionKeys", value: "pattern-key" },
+    ] satisfies ReadonlyArray<{
+      scope: "post" | "global";
+      stateKey: "postSuppressionKeys" | "globalSuppressionKeys";
+      value: string;
+    }>;
+
+    for (const testCase of cases) {
+      const state = createWritingFeedbackState();
+      const issue = createWritingFeedbackIssue(state, {
+        from: 0,
+        to: 4,
+        kind: "Grammar",
+        message: "Grammar issue",
+        problemText: "Body",
+        contextHash: "post-hash",
+        patternKey: "pattern-key",
+      });
+      const opened = openWritingFeedbackIssue(applyWritingFeedbackIssues(state, [issue]), issue.id);
+      const transaction = suppressWritingFeedbackIssue(opened, testCase.scope);
+
+      expect(transaction).not.toBe(null);
+      const suppressed = opened.apply(transaction!);
+      const pluginState = writingFeedbackPluginKey.getState(suppressed);
+      expect(pluginState?.[testCase.stateKey]).toContain(testCase.value);
+      expect(pluginState?.activeId).toBe(null);
+      expect(writingFeedbackIssues(suppressed)).toHaveLength(0);
+      expect(writingFeedbackDecorations(suppressed)).toHaveLength(0);
+    }
+  });
+
+  it("adds active spelling feedback to dictionaries and hides matching issues", () => {
+    const cases = [
+      { scope: "post" as const, stateKey: "postDictionaryWords" },
+      { scope: "global" as const, stateKey: "globalDictionaryWords" },
+    ] satisfies ReadonlyArray<{
+      scope: "post" | "global";
+      stateKey: "postDictionaryWords" | "globalDictionaryWords";
+    }>;
+
+    for (const testCase of cases) {
+      const state = createWritingFeedbackState();
+      const spelling = createWritingFeedbackIssue(state, {
+        from: 0,
+        to: 4,
+        kind: "Spelling",
+        message: "Spelling issue",
+        problemText: "ProseMirror",
+      });
+      const grammar = createWritingFeedbackIssue(state, {
+        from: 7,
+        to: 11,
+        kind: "Grammar",
+        message: "Grammar issue",
+        problemText: "text",
+      });
+      const opened = openWritingFeedbackIssue(
+        applyWritingFeedbackIssues(state, [spelling, grammar]),
+        spelling.id,
+      );
+      const transaction = addWritingFeedbackIssueToDictionary(opened, testCase.scope);
+
+      expect(transaction).not.toBe(null);
+      const updated = opened.apply(transaction!);
+      const pluginState = writingFeedbackPluginKey.getState(updated);
+      expect(pluginState?.[testCase.stateKey]).toContain("ProseMirror");
+      expect(pluginState?.activeId).toBe(null);
+      expect(writingFeedbackIssues(updated)).toHaveLength(1);
+      expect(writingFeedbackIssues(updated)[0]?.id).toBe(grammar.id);
+    }
+  });
+
+  it("ignores stale lint responses", () => {
+    const state = createWritingFeedbackState();
+    const issues = createWritingFeedbackIssues(projectWritingFeedbackText(state.doc), [
+      { from: 0, to: 4, kind: "Spelling", message: "Spelling issue" },
+    ]);
+    const pending = state.apply(
+      state.tr.setMeta(writingFeedbackPluginKey, { type: "start", requestId: 2 }),
+    );
+    const stale = pending.apply(
+      pending.tr.setMeta(writingFeedbackPluginKey, {
+        type: "finish",
+        requestId: 1,
+        issues,
+      }),
+    );
+    const current = stale.apply(
+      stale.tr.setMeta(writingFeedbackPluginKey, {
+        type: "finish",
+        requestId: 2,
+        issues,
+      }),
+    );
+
+    expect(writingFeedbackDecorations(stale)).toHaveLength(0);
+    expect(writingFeedbackDecorations(current)).toHaveLength(1);
+    expect(writingFeedbackIssues(current)).toHaveLength(1);
+  });
+
+  it("ignores results for an older document during the debounce window", () => {
+    const state = createWritingFeedbackState();
+    const issues = createWritingFeedbackIssues(projectWritingFeedbackText(state.doc), [
+      { from: 0, to: 4, kind: "Spelling", message: "Spelling issue" },
+    ]);
+    const pending = state.apply(
+      state.tr.setMeta(writingFeedbackPluginKey, { type: "start", requestId: 1 }),
+    );
+    const edited = pending.apply(pending.tr.insertText("New ", 1));
+    const stale = edited.apply(
+      edited.tr.setMeta(writingFeedbackPluginKey, {
+        type: "finish",
+        requestId: 1,
+        doc: state.doc,
+        issues,
+      }),
+    );
+
+    expect(writingFeedbackDecorations(stale)).toHaveLength(0);
+  });
+
+  it("clears decorations after a current request failure", () => {
+    const state = createWritingFeedbackState();
+    const issues = createWritingFeedbackIssues(projectWritingFeedbackText(state.doc), [
+      { from: 0, to: 4, kind: "Spelling", message: "Spelling issue" },
+    ]);
+    const decorated = applyWritingFeedbackIssues(state, issues);
+    const failed = decorated.apply(
+      decorated.tr.setMeta(writingFeedbackPluginKey, { type: "start", requestId: 2 }),
+    );
+    const cleared = failed.apply(
+      failed.tr.setMeta(writingFeedbackPluginKey, { type: "clear", requestId: 2 }),
+    );
+
+    expect(writingFeedbackDecorations(cleared)).toHaveLength(0);
+    expect(writingFeedbackIssues(cleared)).toHaveLength(0);
   });
 });

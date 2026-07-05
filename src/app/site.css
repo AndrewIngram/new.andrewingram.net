@@ -89,9 +89,10 @@ article.post {
 }
 
 article.post-detail {
-  max-width: 40rem;
+  max-width: none;
 
   header {
+    max-width: 40rem;
     margin-bottom: 2rem;
 
     h1 {
@@ -99,6 +100,62 @@ article.post-detail {
       line-height: 1.05;
       font-weight: 650;
     }
+  }
+
+  .post-content {
+    max-width: 40rem;
+  }
+}
+
+.post-detail-body {
+  display: grid;
+  gap: 2rem;
+  align-items: start;
+}
+
+.post-outline {
+  max-width: 40rem;
+  padding-block: 0.75rem;
+  border-block: 1px solid rgb(17, 24, 39, 0.16);
+  font-size: 0.8rem;
+
+  h2 {
+    margin-bottom: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 650;
+    text-transform: uppercase;
+  }
+
+  ol {
+    display: grid;
+    gap: 0.35rem;
+    list-style: none;
+  }
+
+  li {
+    padding-left: calc(var(--outline-depth, 1) * 0.75rem);
+  }
+
+  a {
+    opacity: 0.78;
+  }
+}
+
+@media (min-width: 56rem) {
+  .post-detail-body {
+    grid-template-columns: minmax(0, 40rem) minmax(10rem, 1fr);
+  }
+
+  .post-outline {
+    position: sticky;
+    top: 1rem;
+    grid-column: 2;
+    grid-row: 1;
+    max-width: 14rem;
+    border-block: 0;
+    border-left: 1px solid rgb(17, 24, 39, 0.16);
+    padding-block: 0;
+    padding-left: 1rem;
   }
 }
 

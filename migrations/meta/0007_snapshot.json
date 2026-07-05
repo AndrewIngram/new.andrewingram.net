@@ -1,0 +1,391 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "2dfd91aa-03bb-4d7e-968d-c54740446ff4",
+  "prevId": "2bd9101e-1e45-4c3d-9440-f43c42eb69f2",
+  "tables": {
+    "post_slug_redirects": {
+      "name": "post_slug_redirects",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "post_id": {
+          "name": "post_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "post_slug_redirects_slug_unique": {
+          "name": "post_slug_redirects_slug_unique",
+          "columns": [
+            "slug"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "posts": {
+      "name": "posts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "draft_slug": {
+          "name": "draft_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "draft_title": {
+          "name": "draft_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "draft_content": {
+          "name": "draft_content",
+          "type": "blob",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "draft_show_outline": {
+          "name": "draft_show_outline",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "draft_updated_at": {
+          "name": "draft_updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "published_slug": {
+          "name": "published_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "published_title": {
+          "name": "published_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "published_content": {
+          "name": "published_content",
+          "type": "blob",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "published_show_outline": {
+          "name": "published_show_outline",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_published_at": {
+          "name": "last_published_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "posts_id_unique": {
+          "name": "posts_id_unique",
+          "columns": [
+            "id"
+          ],
+          "isUnique": true
+        },
+        "posts_draft_slug_unique": {
+          "name": "posts_draft_slug_unique",
+          "columns": [
+            "draft_slug"
+          ],
+          "isUnique": true
+        },
+        "posts_published_slug_unique": {
+          "name": "posts_published_slug_unique",
+          "columns": [
+            "published_slug"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "writing_feedback_dictionary_words": {
+      "name": "writing_feedback_dictionary_words",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "post_id": {
+          "name": "post_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "word_key": {
+          "name": "word_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "word": {
+          "name": "word",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "writing_feedback_dictionary_words_post_unique": {
+          "name": "writing_feedback_dictionary_words_post_unique",
+          "columns": [
+            "post_id",
+            "word_key"
+          ],
+          "where": "\"post_id\" IS NOT NULL",
+          "isUnique": true
+        },
+        "writing_feedback_dictionary_words_global_unique": {
+          "name": "writing_feedback_dictionary_words_global_unique",
+          "columns": [
+            "word_key"
+          ],
+          "where": "\"post_id\" IS NULL",
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "writing_feedback_dictionary_words_post_id_posts_id_fk": {
+          "name": "writing_feedback_dictionary_words_post_id_posts_id_fk",
+          "tableFrom": "writing_feedback_dictionary_words",
+          "columnsFrom": [
+            "post_id"
+          ],
+          "tableTo": "posts",
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "writing_feedback_suppressions": {
+      "name": "writing_feedback_suppressions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "post_id": {
+          "name": "post_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "key_kind": {
+          "name": "key_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "example_text": {
+          "name": "example_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "writing_feedback_suppressions_post_unique": {
+          "name": "writing_feedback_suppressions_post_unique",
+          "columns": [
+            "post_id",
+            "key_kind",
+            "key"
+          ],
+          "where": "\"post_id\" IS NOT NULL",
+          "isUnique": true
+        },
+        "writing_feedback_suppressions_global_unique": {
+          "name": "writing_feedback_suppressions_global_unique",
+          "columns": [
+            "key_kind",
+            "key"
+          ],
+          "where": "\"post_id\" IS NULL",
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "writing_feedback_suppressions_post_id_posts_id_fk": {
+          "name": "writing_feedback_suppressions_post_id_posts_id_fk",
+          "tableFrom": "writing_feedback_suppressions",
+          "columnsFrom": [
+            "post_id"
+          ],
+          "tableTo": "posts",
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "writing_feedback_suppressions_scope_check": {
+          "name": "writing_feedback_suppressions_scope_check",
+          "value": "(\"post_id\" IS NOT NULL AND \"scope\" = 'post' AND \"key_kind\" = 'context_hash') OR (\"post_id\" IS NULL AND \"scope\" = 'global' AND \"key_kind\" = 'pattern')"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

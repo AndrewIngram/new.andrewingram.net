@@ -16,6 +16,42 @@ _Avoid_: Heading, headline
 The structured body of a **Post**, including the title-bearing structure and rich text blocks used for public rendering.
 _Avoid_: Document, editor state
 
+**Post outline**:
+An optional navigation aid generated from headings in a **Post**'s public body content.
+_Avoid_: Table of contents, contents
+
+**Writing feedback**:
+Editor-only spelling, grammar, and style guidance shown while authoring **Post content**. **Writing feedback** is not part of a **Draft version** or **Published version**.
+_Avoid_: Grammar error, content validation
+
+**Writing feedback suppression**:
+An editor-only preference that hides a grammar or style **Writing feedback** item. A suppression may apply to one **Post** or globally across the CMS, but it is not **Post content** and does not create draft changes.
+_Avoid_: Content edit, rule deletion
+
+**Writing feedback dictionary word**:
+An editor-only spelling preference that teaches Harper an accepted word. A dictionary word may apply to one **Post** or globally across the CMS, but it is not **Post content** and does not create draft changes.
+_Avoid_: Saved word, spelling correction
+
+**Draft version**:
+The editable version of a **Post** that is not visible on the public site until it is published.
+_Avoid_: Working copy, unpublished changes
+
+**Published version**:
+The public version of a **Post** visible on the site. A **Post** may have a **Published version** and a newer **Draft version** at the same time.
+_Avoid_: Live copy, current version
+
+**Unpublished Post**:
+A **Post** that has been published before but is currently hidden from the public site.
+_Avoid_: Draft
+
+**Archived Post**:
+A **Post** hidden from the public site and from the normal active editing workflow, without deleting its authored content.
+_Avoid_: Deleted post
+
+**Slug redirect**:
+A public redirect from an old **Post** slug to the current published slug for the same **Post**.
+_Avoid_: Alias, rewrite
+
 **Media figure**:
 An image, video, or other media embed placed in **Post content**. A **Media figure** may have one caption authored with the post; library captions are reusable defaults, not linked captions.
 _Avoid_: Attachment, asset
