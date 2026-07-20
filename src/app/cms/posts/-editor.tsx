@@ -12,6 +12,7 @@ import {
   useTransition,
 } from "react";
 import { useRouter } from "@tanstack/react-router";
+import { SlidersHorizontalIcon } from "lucide-react";
 import { EditorState, type Transaction } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 
@@ -22,8 +23,26 @@ import type {
   AddWritingFeedbackSuppressionInput,
   WritingFeedbackPreferences,
 } from "@/lib/writing-feedback-preferences";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import {
   Sheet,
@@ -46,6 +65,10 @@ import { createEditorPlugins, externalPlugins } from "./-editor/plugins";
 import { docToJSON, extractTitle, normalizePostDoc, postSchema } from "./-editor/schema";
 import { SlashMenu } from "./-editor/slash-menu";
 import { WritingFeedbackPopover } from "./-editor/writing-feedback-popover";
+import {
+  fromPublicationDateFields,
+  toPublicationDateFields,
+} from "./-publication-date";
 
 type EditorProps = {
   post: Post;
@@ -68,19 +91,6 @@ type EditorProps = {
 type ImageSheetIntent = { type: "insert" } | { type: "replace"; figurePos: number };
 
 const imageIdFromSrc = (src: string) => /^\/images\/([^/?#]+)/.exec(src)?.[1] ?? null;
-
-const toDateTimeLocalValue = (value?: string) => {
-  const date = value ? new Date(value) : new Date();
-  const validDate = Number.isNaN(date.getTime()) ? new Date() : date;
-  return new Date(validDate.getTime() - validDate.getTimezoneOffset() * 60_000)
-    .toISOString()
-    .slice(0, 16);
-};
-
-const fromDateTimeLocalValue = (value: string) => {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
-};
 
 function EditorViewTracker({
   editorViewRef,
@@ -136,8 +146,11 @@ const PostEditor = ({
   const currentTitle = extractTitle(currentContent) || post.title || "Untitled post";
   const [slug, setSlug] = useState(post.slug);
   const [showOutline, setShowOutline] = useState(post.showOutline);
-  const [publicationDate, setPublicationDate] = useState(() =>
-    toDateTimeLocalValue(post.publishedAt),
+  const [publicationDate, setPublicationDate] = useState(
+    () => toPublicationDateFields(post.publishedAt).date,
+  );
+  const [publicationTime, setPublicationTime] = useState(
+    () => toPublicationDateFields(post.publishedAt).time,
   );
   const [isSaving, startTransition] = useTransition();
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -168,7 +181,9 @@ const PostEditor = ({
     );
     setSlug(post.slug);
     setShowOutline(post.showOutline);
-    setPublicationDate(toDateTimeLocalValue(post.publishedAt));
+    const publicationFields = toPublicationDateFields(post.publishedAt);
+    setPublicationDate(publicationFields.date);
+    setPublicationTime(publicationFields.time);
   }, [initialDoc, plugins, post.publishedAt, post.showOutline, post.slug]);
 
   const getDraftInput = (): SavePostInput => {
@@ -212,7 +227,7 @@ const PostEditor = ({
     runPostMutation(() =>
       publishPost({
         ...getDraftInput(),
-        publishedAt: fromDateTimeLocalValue(publicationDate),
+        publishedAt: fromPublicationDateFields(publicationDate, publicationTime),
       }),
     );
   };
@@ -326,7 +341,7 @@ const PostEditor = ({
   };
 
   const longEditorClass =
-    "mx-auto w-full max-w-3xl px-6 py-12 min-h-full outline-none prose prose-lg text-gray-900 [&_h1[data-node='title']]:block [&_h1[data-node='title']]:mb-6 [&_h1[data-node='title']]:mt-4 [&_h1[data-node='title']]:text-4xl [&_h1[data-node='title']]:font-semibold [&_h1[data-node='title']]:tracking-tight [&_figure]:my-6 [&_figure]:overflow-hidden [&_figure]:rounded-xl [&_figure]:border [&_figure]:border-gray-200 [&_figure]:bg-white [&_figure_img]:w-full [&_figure_img]:object-cover [&_figcaption]:px-4 [&_figcaption]:py-3 [&_figcaption]:text-sm [&_figcaption]:text-gray-600 [&_.slash-command-query]:rounded [&_.slash-command-query]:bg-gray-100 [&_.slash-command-query]:px-0.5 [&_.is-empty::before]:float-left [&_.is-empty::before]:h-0 [&_.is-empty::before]:text-gray-400 [&_.is-empty::before]:pointer-events-none [&_.is-empty::before]:content-[attr(data-placeholder)]";
+    "post-editor-content mx-auto w-full max-w-3xl px-6 py-12 min-h-full outline-none prose prose-lg text-gray-900 [&_h1[data-node='title']]:block [&_h1[data-node='title']]:mb-6 [&_h1[data-node='title']]:mt-4 [&_h1[data-node='title']]:text-4xl [&_h1[data-node='title']]:font-semibold [&_h1[data-node='title']]:tracking-tight [&_figure]:my-6 [&_figure]:overflow-hidden [&_figure]:rounded-xl [&_figure]:border [&_figure]:border-gray-200 [&_figure]:bg-white [&_figure_img]:w-full [&_figure_img]:object-cover [&_figcaption]:px-4 [&_figcaption]:py-3 [&_figcaption]:text-sm [&_figcaption]:text-gray-600 [&_.slash-command-query]:rounded [&_.slash-command-query]:bg-gray-100 [&_.slash-command-query]:px-0.5 [&_.is-empty::before]:float-left [&_.is-empty::before]:h-0 [&_.is-empty::before]:text-gray-400 [&_.is-empty::before]:pointer-events-none [&_.is-empty::before]:content-[attr(data-placeholder)]";
 
   return (
     <>
@@ -440,14 +455,13 @@ const PostEditor = ({
       </Sheet>
 
       <CmsFloatingChrome
-        collection="posts"
+        navigation={{ type: "back", label: "Posts", to: "/cms/posts" }}
         currentPage={currentTitle}
         actions={
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <span className="text-xs text-gray-500">
-              {post.status}
-              {post.hasDraftChanges && post.hasPublishedVersion ? " + draft changes" : ""}
-            </span>
+          <>
+            {post.hasDraftChanges && post.hasPublishedVersion ? (
+              <Badge variant="outline">Unpublished changes</Badge>
+            ) : null}
             {saveError ? (
               <span role="alert" className="text-xs text-red-600">
                 {saveError}
@@ -460,57 +474,109 @@ const PostEditor = ({
             <Button onClick={handlePublish} disabled={isSaving}>
               {post.hasPublishedVersion ? "Republish" : "Publish"}
             </Button>
-            {post.status === "published" && post.id !== "new" ? (
-              <Button variant="outline" onClick={handleUnpublish} disabled={isSaving}>
-                Unpublish
-              </Button>
-            ) : null}
-            {post.hasPublishedVersion && post.hasDraftChanges && post.id !== "new" ? (
-              <Button variant="outline" onClick={handleDiscardDraft} disabled={isSaving}>
-                Discard Draft
-              </Button>
-            ) : null}
-            {post.id !== "new" && post.status !== "archived" ? (
-              <Button variant="outline" onClick={handleArchive} disabled={isSaving}>
-                Archive
-              </Button>
-            ) : null}
-          </div>
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    title="Post settings"
+                    aria-label="Post settings"
+                    disabled={isSaving}
+                  >
+                    <SlidersHorizontalIcon className="size-4" />
+                  </Button>
+                }
+              />
+              <PopoverContent align="end" className="w-96 max-w-[calc(100vw-2rem)]">
+                <PopoverHeader>
+                  <PopoverTitle>Post settings</PopoverTitle>
+                </PopoverHeader>
+                <div className="space-y-4">
+                  <label className="space-y-1">
+                    <span className="text-xs font-medium uppercase text-gray-500">
+                      Slug
+                    </span>
+                    <Input
+                      value={slug}
+                      onChange={(event) => setSlug(event.target.value)}
+                      placeholder="Auto-generate from title"
+                    />
+                  </label>
+                  <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                    <label className="space-y-1">
+                      <span className="text-xs font-medium uppercase text-gray-500">
+                        Publication date
+                      </span>
+                      <Input
+                        type="date"
+                        value={publicationDate}
+                        onChange={(event) => setPublicationDate(event.target.value)}
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-medium uppercase text-gray-500">
+                        Time
+                      </span>
+                      <Input
+                        type="time"
+                        value={publicationTime}
+                        onChange={(event) => setPublicationTime(event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <label className="flex items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2">
+                    <span className="text-xs font-medium uppercase text-gray-500">
+                      Post outline
+                    </span>
+                    <Switch checked={showOutline} onCheckedChange={setShowOutline} />
+                  </label>
+                  <div className="border-t border-gray-200 pt-4">
+                    <p className="mb-2 text-xs font-medium uppercase text-gray-500">
+                      Status
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {post.status === "published" && post.id !== "new" ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleUnpublish}
+                          disabled={isSaving}
+                        >
+                          Unpublish
+                        </Button>
+                      ) : null}
+                      {post.hasPublishedVersion && post.hasDraftChanges && post.id !== "new" ? (
+                        <ConfirmPostAction
+                          title="Discard draft changes?"
+                          description="This restores the draft to the current published version."
+                          actionLabel="Discard Draft"
+                          disabled={isSaving}
+                          onConfirm={handleDiscardDraft}
+                        />
+                      ) : null}
+                      {post.id !== "new" && post.status !== "archived" ? (
+                        <ConfirmPostAction
+                          title="Archive post?"
+                          description="This hides the post from the active editing workflow."
+                          actionLabel="Archive"
+                          disabled={isSaving}
+                          onConfirm={handleArchive}
+                          destructive
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+          </>
         }
       />
 
-      <div className="flex min-h-svh bg-white pt-48 xl:pt-20">
+      <div className="flex min-h-svh bg-white pt-24">
         <div className="flex-1">
-          <div className="mx-auto mt-6 w-full max-w-3xl px-6">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <label className="space-y-1">
-                <span className="text-xs font-medium uppercase text-gray-500">
-                  Slug
-                </span>
-                <Input
-                  value={slug}
-                  onChange={(event) => setSlug(event.target.value)}
-                  placeholder="post-slug"
-                />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium uppercase text-gray-500">
-                  Publication date
-                </span>
-                <Input
-                  type="datetime-local"
-                  value={publicationDate}
-                  onChange={(event) => setPublicationDate(event.target.value)}
-                />
-              </label>
-              <label className="flex items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2">
-                <span className="text-xs font-medium uppercase text-gray-500">
-                  Post outline
-                </span>
-                <Switch checked={showOutline} onCheckedChange={setShowOutline} />
-              </label>
-            </div>
-          </div>
           <FigureNodeViewProvider requestReplacement={requestImageReplacement}>
             <ProseMirror
               state={editorState}
@@ -537,5 +603,52 @@ const PostEditor = ({
     </>
   );
 };
+
+function ConfirmPostAction({
+  title,
+  description,
+  actionLabel,
+  disabled,
+  destructive = false,
+  onConfirm,
+}: {
+  title: string;
+  description: string;
+  actionLabel: string;
+  disabled: boolean;
+  destructive?: boolean;
+  onConfirm: () => void;
+}) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger
+        render={
+          <Button
+            type="button"
+            variant={destructive ? "destructive" : "outline"}
+            disabled={disabled}
+          >
+            {actionLabel}
+          </Button>
+        }
+      />
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel
+            variant={destructive ? "destructive" : "default"}
+            onClick={onConfirm}
+          >
+            {actionLabel}
+          </AlertDialogCancel>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 export default PostEditor;

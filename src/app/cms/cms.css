@@ -228,3 +228,35 @@ body {
     transform: none;
   }
 }
+
+.post-editor-content > [data-node="title"],
+.post-editor-content > [data-node="title"] + * {
+  position: relative;
+}
+
+.post-editor-content > [data-node="title"]::after,
+.post-editor-content > [data-node="title"] + *::after {
+  position: absolute;
+  left: -6.5rem;
+  top: 0.7em;
+  width: 5rem;
+  color: var(--muted-foreground);
+  content: "TITLE";
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  pointer-events: none;
+  text-align: right;
+}
+
+.post-editor-content > [data-node="title"] + *::after {
+  content: "CONTENT";
+}
+
+@media (max-width: 56rem) {
+  .post-editor-content > [data-node="title"]::after,
+  .post-editor-content > [data-node="title"] + *::after {
+    display: none;
+  }
+}

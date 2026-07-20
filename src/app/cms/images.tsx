@@ -49,7 +49,7 @@ function ImagesPage() {
 
   return (
     <>
-      <CmsFloatingChrome collection="images" />
+      <CmsFloatingChrome navigation={{ type: "collection", collection: "images" }} />
       <div className="flex min-h-svh flex-col gap-6 px-6 pb-6 pt-24">
         <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900">Upload image</h2>

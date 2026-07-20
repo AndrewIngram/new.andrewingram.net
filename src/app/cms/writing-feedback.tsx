@@ -140,7 +140,9 @@ function WritingFeedbackPreferencesPage() {
 
   return (
     <>
-      <CmsFloatingChrome collection="writingFeedback" />
+      <CmsFloatingChrome
+        navigation={{ type: "collection", collection: "writingFeedback" }}
+      />
       <div className="flex min-h-svh flex-col gap-6 px-4 pb-6 pt-24 sm:px-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>

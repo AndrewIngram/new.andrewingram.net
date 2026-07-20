@@ -40,6 +40,10 @@ _Avoid_: Working copy, unpublished changes
 The public version of a **Post** visible on the site. A **Post** may have a **Published version** and a newer **Draft version** at the same time.
 _Avoid_: Live copy, current version
 
+**Unpublished changes**:
+Saved **Draft version** changes that differ from the **Published version** and are not visible on the public site. **Unpublished changes** are distinct from an **Unpublished Post**.
+_Avoid_: Unsaved changes, dirty editor
+
 **Unpublished Post**:
 A **Post** that has been published before but is currently hidden from the public site.
 _Avoid_: Draft
